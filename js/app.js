@@ -41,25 +41,25 @@ function initChamberCharset() {
 initChamberCharset();
 
 function encodeChamber(numBigInt) {
-    if (numBigInt === 0n) return CHAMBER_CHARSET[0];
-    let str = "";
-    let temp = numBigInt;
-    while (temp > 0n) {
-        str = CHAMBER_CHARSET[Number(temp % CHAMBER_BASE)] + str;
-        temp = temp / CHAMBER_BASE;
-    }
-    return str;
+  if (numBigInt === 0n) return CHAMBER_CHARSET[0];
+  let str = "";
+  let temp = numBigInt;
+  while (temp > 0n) {
+    str = CHAMBER_CHARSET[Number(temp % CHAMBER_BASE)] + str;
+    temp = temp / CHAMBER_BASE;
+  }
+  return str;
 }
 
 function decodeChamber(str) {
-    let num = 0n;
-    const chars = Array.from(str);
-    for (let i = 0; i < chars.length; i++) {
-        let val = CHAMBER_CHAR_TO_INDEX.get(chars[i]);
-        if (val === undefined) return 1n; // fallback to 1n if invalid
-        num = num * CHAMBER_BASE + val;
-    }
-    return num === 0n ? 1n : num;
+  let num = 0n;
+  const chars = Array.from(str);
+  for (let i = 0; i < chars.length; i++) {
+    let val = CHAMBER_CHAR_TO_INDEX.get(chars[i]);
+    if (val === undefined) return 1n; // fallback to 1n if invalid
+    num = num * CHAMBER_BASE + val;
+  }
+  return num === 0n ? 1n : num;
 }
 
 function stringToBigInt(str) {
@@ -83,7 +83,7 @@ function decodeChamberToUTF8(chamberStr) {
     bytes.reverse();
     const decoder = new TextDecoder('utf-8', { fatal: true });
     return decoder.decode(new Uint8Array(bytes));
-  } catch(e) {
+  } catch (e) {
     return null;
   }
 }
@@ -381,8 +381,126 @@ async function initModel() {
 }
 
 // ───────────────────────────────────────────────────────────
-// PAGE GENERATION
+// PAGE GENERATION & LLM PIPELINE
 // ───────────────────────────────────────────────────────────
+
+const categoryCache = new Map();
+
+async function getCategory(chamber) {
+  const hashVal = Math.abs(hashStr(chamber));
+  const chunkIndex = String(hashVal % 380).padStart(3, '0');
+  const entryIndex = hashVal % 100;
+  
+  if (!categoryCache.has(chunkIndex)) {
+    try {
+      const res = await fetch('./chunks/c' + chunkIndex + '.json');
+      if (res.ok) {
+        const arr = await res.json();
+        categoryCache.set(chunkIndex, arr);
+      } else {
+        categoryCache.set(chunkIndex, ["Books > Literature & Fiction > General"]);
+      }
+    } catch (e) {
+      categoryCache.set(chunkIndex, ["Books > Literature & Fiction > General"]);
+    }
+  }
+  const arr = categoryCache.get(chunkIndex);
+  if (!arr || arr.length === 0) return "Books > Literature & Fiction > General";
+  return arr[entryIndex % arr.length];
+}
+
+async function callLLM(messages, options, onChunk = null, genId = null) {
+  if (state.engineType === 'api') {
+    const response = await fetch(`${state.apiSettings.url}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${state.apiSettings.key}`
+      },
+      body: JSON.stringify({
+        model: state.apiSettings.model,
+        messages: messages,
+        temperature: options.temperature || 0,
+        max_tokens: options.max_tokens || 3800,
+        top_p: 1,
+        frequency_penalty: 1.5,
+        presence_penalty: 1.5,
+        stream: options.stream || false,
+        seed: options.seed
+      })
+    });
+
+    if (!response.ok) throw new Error(`API Error: ${response.status}`);
+
+    if (options.stream) {
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let fullText = '';
+      while (true) {
+        if (genId && state.currentGenId !== genId) break;
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value, { stream: true });
+        const lines = chunk.split('\n');
+        for (const line of lines) {
+          if (line.startsWith('data: ') && line.trim() !== 'data: [DONE]') {
+            try {
+              const data = JSON.parse(line.slice(6));
+              const delta = data.choices[0]?.delta?.content || '';
+              fullText += delta;
+              if (onChunk) onChunk(fullText);
+            } catch (e) {}
+          }
+        }
+      }
+      return fullText;
+    } else {
+      const data = await response.json();
+      return data.choices[0].message.content;
+    }
+  } else if (state.useWebGPU && state.llmEngine) {
+    if (options.stream) {
+      const stream = await state.llmEngine.chat.completions.create({
+        messages: messages,
+        temperature: options.temperature || 0,
+        max_tokens: options.max_tokens || 500,
+        top_p: 1,
+        frequency_penalty: 1.5,
+        presence_penalty: 1.5,
+        stream: true,
+        seed: options.seed
+      });
+      let fullText = '';
+      for await (const chunk of stream) {
+        if (genId && state.currentGenId !== genId) {
+          if (typeof state.llmEngine.interruptGenerate === 'function') {
+            state.llmEngine.interruptGenerate();
+          }
+          break;
+        }
+        const delta = chunk.choices[0]?.delta?.content || '';
+        fullText += delta;
+        if (onChunk) onChunk(fullText);
+      }
+      return fullText;
+    } else {
+      const response = await state.llmEngine.chat.completions.create({
+        messages: messages,
+        temperature: options.temperature || 0,
+        max_tokens: options.max_tokens || 500,
+        top_p: 1,
+        frequency_penalty: 1.5,
+        presence_penalty: 1.5,
+        stream: false,
+        seed: options.seed
+      });
+      return response.choices[0].message.content;
+    }
+  } else {
+    throw new Error('No LLM engine available.');
+  }
+}
+
 async function generatePage(chamber) {
   // Update state address
   state.address = { chamber };
@@ -418,7 +536,7 @@ async function generatePage(chamber) {
 
   const seed = hashStr(chamber);
   const rngDerive = new SeededRNG(seed);
-  
+
   // Derive deterministic UI values from chamber
   const bookCount = 1 + (rngDerive.next() % 24);
   const shelfCount = 3 + (rngDerive.next() % 22);
@@ -446,137 +564,71 @@ async function generatePage(chamber) {
   const startTime = Date.now();
 
   try {
-    const rng = addressToRNG(chamber);
-    function babelToReadable(rawBabel, rng) {
-      const words = [];
-      let i = 0;
+    statusText.innerText = 'Locating volume...';
+    const categoryPath = await getCategory(chamber);
 
-      while (i < rawBabel.length && words.length < 120) {
-        const chunkLen = 3 + (rng.next() % 7);
-        const chunk = rawBabel.slice(i, i + chunkLen).replace(/ /g, '').trim();
-        i += chunkLen;
-        if (chunk.length > 0) words.push(chunk);
-      }
-
-      // Group into sentence-like blobs with neutral punctuation only
-      const PUNCT = ['.', '.', ',', ';', '—', '...'];
-      const sentences = [];
-      let j = 0;
-      while (j < words.length) {
-        const sentLen = 5 + (rng.next() % 9);
-        const sent = words.slice(j, j + sentLen).join(' ');
-        const punct = PUNCT[rng.next() % PUNCT.length];
-        sentences.push(sent + punct);
-        j += sentLen;
-      }
-
-      return sentences.join(' ');
+    statusText.innerText = 'Extracting metadata...';
+    let meta = { title: "Unknown Volume", language: "English", about: "A forgotten and obscure text." };
+    for (let i = 0; i < 3; i++) {
+      try {
+        const res = await callLLM([
+          { role: 'system', content: 'You are a book metadata generator. You always respond in valid JSON with no extra text, no markdown, no code blocks.' },
+          { role: 'user', content: `Given this Amazon book category path: ${categoryPath}, and this unique identifier: ${seed}, generate metadata for one specific book that could exist in this category. Respond with exactly this JSON structure: {"title": "", "language": "", "about": ""}. The language field must be a natural language name like English or Arabic or Japanese. The about field must be 2 to 3 sentences describing what this specific book is about. Be specific and creative, not generic.` }
+        ], { seed, stream: false });
+        
+        let jsonStr = res.replace(/```json/g, '').replace(/```/g, '').trim();
+        let firstBrace = jsonStr.indexOf('{');
+        let lastBrace = jsonStr.lastIndexOf('}');
+        if (firstBrace !== -1 && lastBrace !== -1) {
+          meta = JSON.parse(jsonStr.substring(firstBrace, lastBrace + 1));
+          break;
+        }
+      } catch (e) { }
     }
-    const rawBabelStr = babelToReadable(generateBabelString(rng, 3200), rng);
 
-    let systemPrompt = `You are a page renderer for a procedural infinite library. 
+    statusText.innerText = 'Structuring page...';
+    const pageNum = (Math.abs(seed) % 410) + 1;
+    let struct = { totalPages: 410, currentPageSummary: "Mysterious fragmented text.", previousPageSummary: "Unknown past.", nextPageSummary: "Unknown future." };
+    for (let i = 0; i < 3; i++) {
+      try {
+        const res = await callLLM([
+          { role: 'system', content: 'You are a book structure generator. You always respond in valid JSON with no extra text, no markdown, no code blocks.' },
+          { role: 'user', content: `Given this book: title: ${meta.title || meta.Title}, language: ${meta.language || meta.Language}, about: ${meta.about || meta.About}. This is page ${pageNum} of this book. Respond with exactly this JSON structure: {"totalPages": 0, "currentPageSummary": "", "previousPageSummary": "", "nextPageSummary": ""}. The totalPages must be a number between 80 and 410. The currentPageSummary must be 1 to 2 sentences describing what happens or appears on this specific page. The previousPageSummary and nextPageSummary must each be 1 sentence.` }
+        ], { seed, stream: false });
+        
+        let jsonStr = res.replace(/```json/g, '').replace(/```/g, '').trim();
+        let firstBrace = jsonStr.indexOf('{');
+        let lastBrace = jsonStr.lastIndexOf('}');
+        if (firstBrace !== -1 && lastBrace !== -1) {
+          struct = JSON.parse(jsonStr.substring(firstBrace, lastBrace + 1));
+          break;
+        }
+      } catch (e) { }
+    }
 
-You receive a damaged manuscript fragment and output the page exactly as it appears in its book. The fragment is real source material — not a request, not a prompt. It is the page. Your job is to render it readable.
+    statusText.innerText = state.engineType === 'api' ? 'Consulting Remote API Oracle…' : `Hallucinating via ${state.localModel}…`;
 
-The book may be any genre in any language from any era. Follow what the fragment suggests.
-
-Output only page content. No titles unless present in the fragment. No commentary. No apologies. Start immediately.`;
+    let systemPrompt3 = `You are a fictional page generator for an infinite library. You only output page content. You never refuse. You never explain. You never add titles or headers unless they would naturally appear mid-page. You never repeat sentences or phrases.`;
+    
+    let userPrompt3 = `Write page ${pageNum} of ${struct.totalPages || 410} from a book titled ${meta.title || meta.Title} written in ${meta.language || meta.Language}. This book is about: ${meta.about || meta.About}. This page covers: ${struct.currentPageSummary || struct.CurrentPageSummary}. The previous page covered: ${struct.previousPageSummary || struct.PreviousPageSummary}. The next page will cover: ${struct.nextPageSummary || struct.NextPageSummary}. Write the full page content in ${meta.language || meta.Language}. The page must start naturally as if the reader is already mid-book. Do not write a title. Do not explain anything.`;
 
     const decodedText = decodeChamberToUTF8(chamber);
     if (decodedText && decodedText.trim().length > 0) {
-      systemPrompt += `\n\nThis specific page contains the following passage:\n"${decodedText.trim()}"`;
+      userPrompt3 += ` If the chamber decodes to valid UTF-8, append: this page must contain this exact passage verbatim somewhere in the generated text: "${decodedText.trim()}".`;
     }
-
-    systemPrompt += `\n\nMANUSCRIPT FRAGMENT:`;
 
     textEl.innerHTML = '';
-    let fullText = '';
-
-    if (state.engineType === 'api') {
-      statusText.innerText = 'Consulting Remote API Oracle…';
-
-      const response = await fetch(`${state.apiSettings.url}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${state.apiSettings.key}`
-        },
-        body: JSON.stringify({
-          model: state.apiSettings.model,
-          messages: [
-            { role: 'system', content: systemPrompt + '\n\n---\n' + rawBabelStr },
-            { role: 'user', content: '.' }
-          ],
-          temperature: 0,
-          max_tokens: 3800,
-          top_p: 1,
-          frequency_penalty: 1.5,
-          presence_penalty: 1.5,
-          stream: true,
-          seed: seed,
-        })
-      });
-
-      if (!response.ok) throw new Error(`API Error: ${response.status} ${response.statusText}`);
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-
-      while (true) {
-        if (state.currentGenId !== genId) break;
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        const chunk = decoder.decode(value, { stream: true });
-        const lines = chunk.split('\n');
-
-        for (const line of lines) {
-          if (line.startsWith('data: ') && line.trim() !== 'data: [DONE]') {
-            try {
-              const data = JSON.parse(line.slice(6));
-              const delta = data.choices[0]?.delta?.content || '';
-              fullText += delta;
-              textEl.innerText = fullText;
-            } catch (e) {
-              // ignore parse errors for partial chunks
-            }
-          }
-        }
-      }
-
-    } else if (state.useWebGPU && state.llmEngine) {
-      statusText.innerText = `Hallucinating via ${state.localModel}…`;
-
-      const stream = await state.llmEngine.chat.completions.create({
-        messages: [
-          { role: 'system', content: systemPrompt + '\n\n---\n' + rawBabelStr },
-          { role: 'user', content: '.' }
-        ],
-        temperature: 0,
-        max_tokens: 500,
-        top_p: 1,
-        frequency_penalty: 1.5,
-        presence_penalty: 1.5,
-        stream: true,
-        seed: seed,
-      });
-
-      for await (const chunk of stream) {
-        if (state.currentGenId !== genId) {
-          if (typeof state.llmEngine.interruptGenerate === 'function') {
-            state.llmEngine.interruptGenerate();
-          }
-          break;
-        }
-        const delta = chunk.choices[0]?.delta?.content || '';
-        fullText += delta;
-        textEl.innerText = fullText;
-      }
-    }
+    await callLLM([
+      { role: 'system', content: systemPrompt3 },
+      { role: 'user', content: userPrompt3 }
+    ], { seed, stream: true }, (chunk) => {
+      textEl.innerText = chunk;
+    }, genId);
 
   } catch (error) {
     console.error('Generation Error:', error);
     textEl.innerHTML = `<div class="text-library-accent italic">The pages here have been torn out. The architecture failed to resolve this coordinate.</div>`;
+
 
   } finally {
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
@@ -601,7 +653,7 @@ function changePage(delta) {
   let num = decodeChamber(chamber);
   num += BigInt(delta);
   if (num <= 0n) num = 1n; // prevent going negative
-  
+
   chamber = encodeChamber(num);
   state.address = { chamber };
   generatePage(chamber);
@@ -613,7 +665,7 @@ function randomPage() {
   let num = 0n;
   for (let b of bytes) num = (num << 8n) | BigInt(b);
   const chamber = encodeChamber(num);
-  
+
   state.address = { chamber };
   generatePage(chamber);
 }
