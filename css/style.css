@@ -1,0 +1,53 @@
+/* ── SCROLLBAR ── */
+::-webkit-scrollbar       { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: #0c0b0a; }
+::-webkit-scrollbar-thumb { background: #2a2622; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #d67c53; }
+
+/* ── SELECTION ── */
+::selection { background: rgba(214, 124, 83, 0.3); color: #fff; }
+
+/* ── NOISE TEXTURE OVERLAY ── */
+.noise-bg {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  pointer-events: none;
+  z-index: 50;
+  opacity: 0.03;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+}
+
+/* ── HIDE NUMBER INPUT SPINNERS ── */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* ── ACTIVE NAV ITEM ── */
+.nav-active {
+  color: #d67c53;
+  border-left-color: #d67c53;
+  background: linear-gradient(90deg, rgba(214, 124, 83, 0.1) 0%, rgba(21, 19, 17, 0) 100%);
+}
+
+/* ── SHIMMER LOADING SKELETON ── */
+.page-text-loading {
+  color: transparent !important;
+  position: relative;
+}
+.page-text-loading::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    90deg,
+    rgba(42, 38, 34, 0.3) 0%,
+    rgba(42, 38, 34, 0.8) 50%,
+    rgba(42, 38, 34, 0.3) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+  border-radius: 4px;
+}

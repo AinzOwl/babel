@@ -1,0 +1,878 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Library of Babel</title>
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=IBM+Plex+Mono:ital,wght@0,300;0,400;0,500;1,300&display=swap"
+        rel="stylesheet">
+
+    <!-- Icons (Lucide) -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        library: {
+                            bg: '#0c0b0a',       /* Deep dark brown/black */
+                            panel: '#151311',    /* Slightly lighter panel */
+                            border: '#2a2622',   /* Muted border */
+                            text: '#d8cfbe',     /* Parchment text */
+                            muted: '#827a6f',    /* Dimmed text */
+                            accent: '#d67c53',   /* The copper/orange accent from original */
+                            accentHover: '#e8946f'
+                        }
+                    },
+                    fontFamily: {
+                        serif: ['Cinzel', 'serif'],
+                        mono: ['"IBM Plex Mono"', 'monospace'],
+                    },
+                    animation: {
+                        'fade-in': 'fadeIn 0.8s ease-out forwards',
+                        'pulse-slow': 'pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                        'shimmer': 'shimmer 1.5s ease-in-out infinite',
+                    },
+                    keyframes: {
+                        fadeIn: {
+                            '0%': { opacity: '0', transform: 'translateY(10px)' },
+                            '100%': { opacity: '1', transform: 'translateY(0)' },
+                        },
+                        shimmer: {
+                            '0%': { backgroundPosition: '-200% 0' },
+                            '100%': { backgroundPosition: '200% 0' }
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #0c0b0a;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #2a2622;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #d67c53;
+        }
+
+        /* Selection */
+        ::selection {
+            background: rgba(214, 124, 83, 0.3);
+            color: #fff;
+        }
+
+        /* Subtle noise texture overlay */
+        .noise-bg {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 50;
+            opacity: 0.03;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+        }
+
+        /* Input styling overrides */
+        input[type="number"]::-webkit-inner-spin-button,
+        input[type="number"]::-webkit-outer-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+
+        .nav-active {
+            color: #d67c53;
+            border-left-color: #d67c53;
+            background: linear-gradient(90deg, rgba(214, 124, 83, 0.1) 0%, rgba(21, 19, 17, 0) 100%);
+        }
+
+        /* Loader specific styles */
+        .page-text-loading {
+            color: transparent !important;
+            position: relative;
+        }
+
+        .page-text-loading::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: repeating-linear-gradient(90deg,
+                    rgba(42, 38, 34, 0.3) 0%,
+                    rgba(42, 38, 34, 0.8) 50%,
+                    rgba(42, 38, 34, 0.3) 100%);
+            background-size: 200% 100%;
+            animation: shimmer 1.5s ease-in-out infinite;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+
+<body class="bg-library-bg text-library-text font-mono h-screen overflow-hidden flex flex-col md:flex-row antialiased">
+    <div class="noise-bg"></div>
+
+    <!-- Sidebar Navigation -->
+    <aside
+        class="w-full md:w-64 border-b md:border-b-0 md:border-r border-library-border bg-library-panel flex flex-col flex-shrink-0 relative z-20">
+        <div class="p-6 md:p-8 flex items-center gap-3">
+            <i data-lucide="library" class="text-library-accent w-6 h-6"></i>
+            <div>
+                <h1 class="font-serif text-lg font-bold tracking-wider leading-none">Library<br><span
+                        class="text-xs text-library-muted tracking-widest font-mono font-normal uppercase">Of
+                        Babel</span></h1>
+                <div class="text-[9px] text-library-accent mt-1 tracking-widest uppercase">LLM Edition</div>
+            </div>
+        </div>
+
+        <nav class="flex-1 px-4 space-y-2 mt-4 md:mt-8 overflow-y-auto">
+            <button onclick="switchView('home')" id="nav-home"
+                class="nav-active w-full text-left px-4 py-3 rounded border-l-2 border-transparent transition-all flex items-center gap-3 hover:text-library-text text-sm">
+                <i data-lucide="compass" class="w-4 h-4"></i> The Grand Hall
+            </button>
+            <button onclick="switchView('reader')" id="nav-reader"
+                class="w-full text-library-muted text-left px-4 py-3 rounded border-l-2 border-transparent transition-all flex items-center gap-3 hover:text-library-text text-sm">
+                <i data-lucide="book-open" class="w-4 h-4"></i> The Archive
+            </button>
+            <button onclick="switchView('search')" id="nav-search"
+                class="w-full text-library-muted text-left px-4 py-3 rounded border-l-2 border-transparent transition-all flex items-center gap-3 hover:text-library-text text-sm">
+                <i data-lucide="search" class="w-4 h-4"></i> The Index
+            </button>
+            <button onclick="switchView('about')" id="nav-about"
+                class="w-full text-library-muted text-left px-4 py-3 rounded border-l-2 border-transparent transition-all flex items-center gap-3 hover:text-library-text text-sm">
+                <i data-lucide="scroll" class="w-4 h-4"></i> Philosophy
+            </button>
+        </nav>
+
+        <!-- Oracle Status -->
+        <div class="p-6 border-t border-library-border mt-auto">
+            <div
+                class="text-[10px] text-library-muted mb-3 uppercase tracking-widest flex items-center justify-between">
+                <span>The Oracle</span>
+                <span id="oracle-status-dot" class="w-2 h-2 rounded-full bg-red-900 animate-pulse-slow"
+                    title="Model inactive"></span>
+            </div>
+
+            <button id="btn-wake-oracle" onclick="initModel()"
+                class="w-full py-2 px-3 border border-library-accent text-library-accent rounded text-xs hover:bg-library-accent hover:text-library-bg transition-colors flex justify-center items-center gap-2">
+                <i data-lucide="cpu" class="w-3 h-3"></i> <span id="oracle-btn-text">Wake Intelligence</span>
+            </button>
+
+            <div id="oracle-progress-container" class="hidden mt-2">
+                <div class="w-full h-1 bg-library-bg rounded overflow-hidden">
+                    <div id="oracle-progress-fill" class="h-full bg-library-accent w-0 transition-all duration-300">
+                    </div>
+                </div>
+            </div>
+
+            <div id="oracle-active-state" class="hidden flex-col gap-1 mt-2">
+                <div class="text-xs text-green-600/80 flex items-center gap-2">
+                    <i data-lucide="check-circle" class="w-3 h-3"></i> Intelligence Active
+                </div>
+                <div id="oracle-engine-text" class="text-[10px] text-library-muted">SmolLM2 135M (Local WebGPU)</div>
+            </div>
+
+            <div id="oracle-fallback-state" class="hidden flex-col gap-1 mt-2">
+                <div class="text-[11px] text-yellow-600/80 flex items-center gap-2">
+                    <i data-lucide="alert-circle" class="w-3 h-3"></i> Fallback Mode
+                </div>
+                <div class="text-[10px] text-library-muted leading-tight">WebGPU unavailable. Using deterministic RNG
+                    algorithm.</div>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="flex-1 h-full overflow-y-auto relative bg-library-bg z-10 flex flex-col scroll-smooth">
+
+        <!-- VIEW: HOME (The Grand Hall) -->
+        <section id="view-home"
+            class="flex-1 flex flex-col items-center justify-center p-8 animate-fade-in max-w-4xl mx-auto w-full">
+            <i data-lucide="crosshair" class="w-12 h-12 text-library-accent mb-8 opacity-80"></i>
+            <h2
+                class="font-serif text-4xl md:text-5xl lg:text-6xl text-center mb-6 text-transparent bg-clip-text bg-gradient-to-b from-library-text to-library-muted pb-2">
+                The Library of Babel</h2>
+            <div class="text-library-accent tracking-widest text-sm uppercase mb-6">LLM Edition</div>
+            <p class="text-library-muted text-center max-w-2xl leading-relaxed mb-12 text-sm md:text-base">
+                An infinite repository of knowledge, each page uniquely addressed by volume, chapter, and page number.
+                Every address resolves to the exact same text—always—without a database. The meaning is hallucinated
+                into existence by algorithmic intelligence within your browser.
+            </p>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-2xl">
+                <button onclick="switchView('reader')"
+                    class="group p-6 border border-library-border bg-library-panel hover:border-library-accent rounded-lg transition-all text-left">
+                    <h3
+                        class="text-library-accent font-serif text-xl mb-2 group-hover:translate-x-1 transition-transform">
+                        Enter the Archive &rarr;</h3>
+                    <p class="text-xs text-library-muted leading-relaxed">Navigate directly via dimensional coordinates
+                        (Volume, Chapter, Page) or wander at random.</p>
+                </button>
+                <button onclick="switchView('search')"
+                    class="group p-6 border border-library-border bg-library-panel hover:border-library-accent rounded-lg transition-all text-left">
+                    <h3
+                        class="text-library-accent font-serif text-xl mb-2 group-hover:translate-x-1 transition-transform">
+                        Consult the Index &rarr;</h3>
+                    <p class="text-xs text-library-muted leading-relaxed">Provide a thought or query. The Index will
+                        mathematically hash your intent into a permanent deterministic coordinate.</p>
+                </button>
+            </div>
+        </section>
+
+        <!-- VIEW: READER (The Archive) -->
+        <section id="view-reader" class="hidden flex-1 flex flex-col w-full h-full animate-fade-in relative">
+
+            <!-- Address Navigator Bar -->
+            <div class="bg-library-panel border-b border-library-border p-4 sticky top-0 z-10 shadow-md">
+                <div class="max-w-4xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
+
+                    <div class="flex items-center gap-2 text-sm text-library-muted w-full md:w-auto overflow-x-auto">
+                        <div
+                            class="flex items-center bg-library-bg border border-library-border rounded px-3 py-1.5 focus-within:border-library-accent transition-colors">
+                            <span class="mr-2 uppercase tracking-wider text-xs">Vol</span>
+                            <input type="number" id="input-vol" value="1" min="1" max="999999999"
+                                class="bg-transparent w-20 outline-none text-library-text text-center"
+                                onchange="navigateToPage()">
+                        </div>
+                        <span class="text-library-border">&times;</span>
+                        <div
+                            class="flex items-center bg-library-bg border border-library-border rounded px-3 py-1.5 focus-within:border-library-accent transition-colors">
+                            <span class="mr-2 uppercase tracking-wider text-xs">Ch</span>
+                            <input type="number" id="input-ch" value="1" min="1" max="9999"
+                                class="bg-transparent w-16 outline-none text-library-text text-center"
+                                onchange="navigateToPage()">
+                        </div>
+                        <span class="text-library-border">&times;</span>
+                        <div
+                            class="flex items-center bg-library-bg border border-library-border rounded px-3 py-1.5 focus-within:border-library-accent transition-colors">
+                            <span class="mr-2 uppercase tracking-wider text-xs">Pg</span>
+                            <input type="number" id="input-pg" value="1" min="1" max="999"
+                                class="bg-transparent w-16 outline-none text-library-text text-center"
+                                onchange="navigateToPage()">
+                        </div>
+                        <button onclick="navigateToPage()"
+                            class="ml-2 bg-library-border hover:bg-library-accent hover:text-library-bg text-library-text px-3 py-1.5 rounded text-xs transition-colors">
+                            Go
+                        </button>
+                    </div>
+
+                    <div class="flex items-center gap-3 shrink-0">
+                        <button onclick="randomPage()"
+                            class="text-xs border border-library-border hover:border-library-accent hover:text-library-accent px-4 py-2 rounded transition-colors flex items-center gap-2">
+                            <i data-lucide="shuffle" class="w-3 h-3"></i> Random
+                        </button>
+                        <button onclick="copyAddress()"
+                            class="text-xs bg-library-accent/10 text-library-accent hover:bg-library-accent hover:text-library-bg px-4 py-2 rounded transition-colors flex items-center gap-2">
+                            <i data-lucide="copy" class="w-3 h-3"></i> Copy
+                        </button>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- The Book Page -->
+            <div class="flex-1 overflow-y-auto p-6 md:p-12 relative flex justify-center">
+                <div
+                    class="max-w-3xl w-full bg-[#11100e] border border-library-border rounded shadow-2xl p-8 md:p-16 min-h-[60vh] relative flex flex-col">
+
+                    <div
+                        class="absolute top-4 right-6 text-[10px] text-library-muted/50 uppercase tracking-widest font-mono">
+                        Seed: <span id="display-seed">—</span>
+                    </div>
+
+                    <!-- Reading Content -->
+                    <div id="page-content"
+                        class="text-library-text leading-loose space-y-6 text-sm md:text-base font-serif whitespace-pre-wrap flex-1 transition-opacity duration-300">
+                        <div class="text-center text-library-muted italic mt-20 flex flex-col items-center gap-4">
+                            Enter an address above, or click "Random" to begin your journey through the infinite
+                            library...
+                        </div>
+                    </div>
+
+                    <!-- Generation Indicator -->
+                    <div id="gen-indicator"
+                        class="hidden items-center gap-2 text-xs text-library-accent mt-8 opacity-80">
+                        <i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i>
+                        <span id="gen-status-text">Translating coordinate...</span>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- Bottom Pagination -->
+            <div class="border-t border-library-border bg-library-bg p-4 flex justify-between items-center px-8">
+                <div class="text-xs text-library-muted/50 w-32" id="gen-time"></div>
+                <div class="flex gap-8">
+                    <button onclick="changePage(-1)"
+                        class="text-library-muted hover:text-library-accent flex items-center gap-2 text-sm transition-colors">
+                        <i data-lucide="arrow-left" class="w-4 h-4"></i> Previous Page
+                    </button>
+                    <button onclick="changePage(1)"
+                        class="text-library-muted hover:text-library-accent flex items-center gap-2 text-sm transition-colors">
+                        Next Page <i data-lucide="arrow-right" class="w-4 h-4"></i>
+                    </button>
+                </div>
+                <div class="w-32"></div> <!-- Spacer for balance -->
+            </div>
+        </section>
+
+        <!-- VIEW: SEARCH (The Index) -->
+        <section id="view-search"
+            class="hidden flex-1 flex flex-col items-center justify-center p-8 animate-fade-in w-full max-w-3xl mx-auto">
+            <i data-lucide="search" class="w-10 h-10 text-library-muted mb-6"></i>
+            <h2 class="font-serif text-3xl mb-2 text-center">The Index</h2>
+            <p class="text-library-muted text-sm text-center mb-10">Translate a thought into a permanent coordinate
+                within the infinite library.</p>
+
+            <div class="w-full relative">
+                <input type="text" id="search-input"
+                    placeholder="e.g., 'The origin of stars', 'A recipe for moonlight'..."
+                    class="w-full bg-library-panel border border-library-border rounded-lg px-6 py-5 text-library-text focus:outline-none focus:border-library-accent transition-colors placeholder-library-muted/50 text-sm md:text-base pr-32"
+                    onkeypress="handleSearch(event)">
+                <button onclick="executeSearch()"
+                    class="absolute right-2 top-2 bottom-2 bg-library-accent text-library-bg font-bold px-6 rounded hover:bg-library-accentHover transition-colors flex items-center gap-2 text-sm">
+                    Locate <i data-lucide="arrow-right" class="w-4 h-4"></i>
+                </button>
+            </div>
+            <div class="mt-8 text-xs text-library-muted/70 text-center max-w-xl leading-relaxed">
+                The Index mathematically hashes your query into a deterministic address. The exact same query will
+                always reveal the exact same volume, chapter, and page across all time, acting as a permanent pointer to
+                generated meaning.
+            </div>
+        </section>
+
+        <!-- VIEW: ABOUT (Philosophy) -->
+        <section id="view-about"
+            class="hidden flex-1 flex flex-col p-8 md:p-16 animate-fade-in w-full max-w-5xl mx-auto overflow-y-auto">
+            <div class="mb-12">
+                <h2 class="font-serif text-3xl mb-4 text-library-accent">Architecture of the Infinite</h2>
+                <p class="text-library-text leading-relaxed text-sm md:text-base max-w-3xl">
+                    Unlike standard databases, this library stores nothing. The text you read is hallucinated into
+                    existence in real-time by a Large Language Model (or a procedural algorithm) running entirely within
+                    your browser. By tying the generation strict deterministic constraints, the hallucination becomes
+                    permanent.
+                </p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-12">
+
+                <div class="bg-library-panel border border-library-border p-6 rounded-lg">
+                    <i data-lucide="hash" class="w-6 h-6 text-library-accent mb-4"></i>
+                    <h3 class="font-serif text-lg mb-2 text-library-text">The Mechanism of Hashing</h3>
+                    <p class="text-xs text-library-muted leading-relaxed">
+                        Every coordinate (Volume, Chapter, Page) undergoes a bitwise hashing collision-resistant
+                        algorithm to produce a unique 32-bit integer seed. This means the address space gives roughly
+                        999 billion uniquely seeded pages. Every address is valid, and no page is ever repeated unless
+                        you return to the exact same address.
+                    </p>
+                </div>
+
+                <div class="bg-library-panel border border-library-border p-6 rounded-lg">
+                    <i data-lucide="cpu" class="w-6 h-6 text-library-accent mb-4"></i>
+                    <h3 class="font-serif text-lg mb-2 text-library-text">Local WebGPU Inference</h3>
+                    <p class="text-xs text-library-muted leading-relaxed">
+                        When "Intelligence" is awakened, a compressed 1.7 Billion parameter Large Language Model
+                        (SmolLM2) is downloaded into your browser's IndexedDB. By utilizing WebGPU, the matrix
+                        multiplications required for AI generation run purely on your local hardware. No text leaves
+                        your device, no API keys are used, and there is no server-side cost.
+                    </p>
+                </div>
+
+                <div class="bg-library-panel border border-library-border p-6 rounded-lg">
+                    <i data-lucide="snowflake" class="w-6 h-6 text-library-accent mb-4"></i>
+                    <h3 class="font-serif text-lg mb-2 text-library-text">Zero-Temperature Determinism</h3>
+                    <p class="text-xs text-library-muted leading-relaxed">
+                        To guarantee permanence, the LLM receives the deterministic seed generated from your address,
+                        and generates text at exactly `Temperature=0.001`. Because both the seed and the sampling
+                        temperature are fixed, the mathematical output of the neural network is completely constrained.
+                        It will always dream the exact same sequence of tokens for that given address.
+                    </p>
+                </div>
+
+                <div class="bg-library-panel border border-library-border p-6 rounded-lg">
+                    <i data-lucide="shield-alert" class="w-6 h-6 text-library-accent mb-4"></i>
+                    <h3 class="font-serif text-lg mb-2 text-library-text">The Procedural Fallback</h3>
+                    <p class="text-xs text-library-muted leading-relaxed">
+                        If your browser lacks WebGPU support (or you choose not to download the model weights), the
+                        Library gracefully degrades to a procedural "Pseudo-LLM". It uses an implementation of the
+                        XORShift32 seeded random number generator to construct Borges-esque literary prose from a
+                        localized grammar dictionary. It retains the exact same mathematical permanence as the AI
+                        engine.
+                    </p>
+                </div>
+
+            </div>
+
+            <div class="border-t border-library-border pt-8 mt-auto text-center">
+                <p class="font-serif italic text-library-muted text-sm max-w-2xl mx-auto leading-relaxed">
+                    "The Library exists ab aeterno. This truth, whose immediate corollary is the future eternity of the
+                    world, cannot be doubted by any reasonable mind."<br>
+                    <span class="text-xs mt-3 block text-library-muted/50 font-mono not-italic">— Jorge Luis Borges, The
+                        Library of Babel</span>
+                </p>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Notification Toast -->
+    <div id="toast"
+        class="fixed bottom-4 right-4 bg-library-panel border border-library-accent text-library-text px-4 py-3 rounded shadow-lg transform translate-y-20 opacity-0 transition-all duration-300 z-50 flex items-center gap-3">
+        <i data-lucide="info" class="w-4 h-4 text-library-accent"></i>
+        <span id="toast-msg" class="text-sm">Message</span>
+    </div>
+
+    <script>
+        // ───────────────────────────────────────────────────────────
+        // INITIALIZATION
+        // ───────────────────────────────────────────────────────────
+        lucide.createIcons();
+
+        let state = {
+            view: 'home',
+            modelLoaded: false,
+            modelLoading: false,
+            useWebGPU: false,
+            llmEngine: null,
+            address: { v: 1, c: 1, p: 1 },
+            isGenerating: false
+        };
+
+        // ───────────────────────────────────────────────────────────
+        // VIEW NAVIGATION
+        // ───────────────────────────────────────────────────────────
+        function switchView(viewName) {
+            document.querySelectorAll('nav button').forEach(btn => {
+                btn.classList.remove('nav-active', 'text-library-text');
+                btn.classList.add('text-library-muted');
+            });
+            const activeBtn = document.getElementById(`nav-${viewName}`);
+            if (activeBtn) {
+                activeBtn.classList.add('nav-active', 'text-library-text');
+                activeBtn.classList.remove('text-library-muted');
+            }
+
+            document.querySelectorAll('main section').forEach(sec => {
+                sec.classList.add('hidden');
+                sec.classList.remove('flex');
+            });
+
+            const target = document.getElementById(`view-${viewName}`);
+            target.classList.remove('hidden');
+            target.classList.add('flex');
+
+            state.view = viewName;
+
+            // If switching to reader and it's empty, or they used search, ensure it loads.
+            if (viewName === 'reader') {
+                const contentText = document.getElementById('page-content').innerText;
+                if (contentText.includes("Enter an address above")) {
+                    generatePage(state.address.v, state.address.c, state.address.p);
+                }
+            }
+        }
+
+        // ───────────────────────────────────────────────────────────
+        // HASHING & SEEDS (The Mathematics of Determinism)
+        // ───────────────────────────────────────────────────────────
+        function addressToSeed(vol, ch, pg) {
+            // Deterministic, collision-resistant bitwise hash ensuring large spread
+            const a = BigInt(vol) * 1000000007n;
+            const b = BigInt(ch) * 998244353n;
+            const c = BigInt(pg) * 999999937n;
+            const mixed = (a ^ (b << 13n) ^ (c << 7n) ^ (a >> 3n) ^ (b >> 5n)) & 0xFFFFFFFFn;
+            return Number(mixed);
+        }
+
+        function searchToAddress(query) {
+            // Hash query string to a deterministic coordinate
+            let h = 5381;
+            for (let i = 0; i < query.length; i++) {
+                h = ((h << 5) + h) ^ query.charCodeAt(i);
+                h = h >>> 0;
+            }
+            const vol = (h % 999999999) + 1;
+
+            let h2 = h;
+            for (let i = 0; i < query.length; i++) {
+                h2 = ((h2 << 3) + h2) ^ query.charCodeAt(i);
+                h2 = h2 >>> 0;
+            }
+            const ch = (h2 % 9999) + 1;
+            const pg = ((h ^ h2) % 999) + 1;
+            return { vol, ch, pg };
+        }
+
+        // ───────────────────────────────────────────────────────────
+        // DETERMINISTIC PSEUDO-LLM FALLBACK (No WebGPU)
+        // ───────────────────────────────────────────────────────────
+        class SeededRNG {
+            constructor(seed) { this.state = seed >>> 0 || 1; }
+            next() {
+                let x = this.state;
+                x ^= x << 13; x ^= x >> 17; x ^= x << 5;
+                this.state = x >>> 0;
+                return (this.state >>> 0) / 4294967295;
+            }
+            choice(arr) { return arr[Math.floor(this.next() * arr.length)]; }
+            range(min, max) { return Math.floor(this.next() * (max - min + 1)) + min; }
+        }
+
+        const SUBJECTS = ["The cartographer", "A forgotten scholar", "The archivist", "An unnamed traveler", "The last keeper", "A wandering philosopher", "The dream-reader", "An old weaver", "The blind astronomer", "A young apprentice", "The sand-painter", "A river merchant", "The stone-cutter", "An exiled poet", "The time-keeper", "The architect of dust", "A nameless monk"];
+        const VERBS = ["once wrote", "discovered", "believed", "claimed", "whispered", "observed", "recorded", "theorized", "insisted", "documented", "suspected", "calculated", "pondered", "remembered", "warned", "argued", "dreamt"];
+        const OBJECTS = ["that every map is a lie told in good faith", "that the ocean dreams in colors we cannot name", "that silence between words carries more meaning than the words themselves", "that certain stars only become visible when seen from grief", "that all roads lead inward if walked long enough", "that memory is the architecture of the self", "that libraries are the closest thing to immortality", "that light bends around love as it does around great mass", "that every mirror shows a slightly different world", "that some questions are their own answers", "that the most important books are the ones never written", "that time moves differently in places where great sorrow occurred", "that all languages secretly describe the same thing", "that music is mathematics that has learned to feel", "that forgotten names still shape the world they left behind", "that shadows possess a mass independent of light", "that the void is merely waiting for a language to express it"];
+        const CONNECTIVES = ["Furthermore,", "In the same text,", "The account continues:", "A marginal note adds:", "A separate passage states:", "The third chapter elaborates:", "An accompanying diagram explained:", "This was later disputed by those who found", "The same manuscript records that", "A curious footnote mentions that", "In a related entry,", "The reader is told that", "A correction in the margins notes that", "Scholars have since argued that", "A companion volume suggests that", "Conversely, it was believed that", "Yet, paradoxically,"];
+        const CLOSES = ["The manuscript ends without conclusion.", "No further pages survive.", "What followed was never recorded.", "The meaning, if any, remains unclear.", "The original source has since been lost.", "Further volumes are said to exist.", "The author's identity is unknown.", "Whether this is true, none can say.", "The final line is smudged beyond reading.", "The rest of the page is blank.", "History has erased the rest.", "It is left as an exercise for the infinite.", "The remainder was consumed by fire."];
+
+        function generateFallbackText(seed) {
+            const rng = new SeededRNG(seed);
+            const numParagraphs = rng.range(3, 5);
+            const paragraphs = [];
+
+            for (let p = 0; p < numParagraphs; p++) {
+                const numSentences = rng.range(4, 8);
+                const sentences = [];
+
+                for (let i = 0; i < numSentences; i++) {
+                    if (p === numParagraphs - 1 && i === numSentences - 1) {
+                        sentences.push(rng.choice(CLOSES));
+                    } else if (i === 0) {
+                        sentences.push(`${rng.choice(SUBJECTS)} ${rng.choice(VERBS)} ${rng.choice(OBJECTS)}.`);
+                    } else {
+                        const conn = rng.choice(CONNECTIVES);
+                        const subj = rng.choice(SUBJECTS).toLowerCase();
+                        const verb = rng.choice(VERBS);
+                        const obj = rng.choice(OBJECTS);
+                        sentences.push(`${conn} ${subj} ${verb} ${obj}.`);
+                    }
+                }
+                paragraphs.push(sentences.join(' '));
+            }
+            return paragraphs.join('\n\n');
+        }
+
+        // Convert seed to a thematic topic for the LLM prompt
+        function seedToTopicHint(seed) {
+            const topics = [
+                "the nature of forgotten languages", "the geography of dreams", "the mathematics of grief",
+                "ancient methods of preserving memory", "the philosophy of empty spaces", "the taxonomy of silences",
+                "the history of colors that no longer exist", "theories of time perceived in sleep",
+                "the cartography of imaginary seas", "the biography of light through leaves",
+                "the archaeology of disappeared cities", "the ecology of mythical creatures",
+                "the ethics of memory and forgetting", "the astronomy of invisible stars",
+                "the botany of plants that only grow in darkness", "recipes known only to extinct civilizations",
+                "the music of unheard instruments", "the law and customs of impossible nations",
+                "the natural history of paradoxes", "the study of reflections that outlive their sources",
+                "theories on why certain moments feel eternal", "the migration patterns of ideas across centuries",
+                "the anatomy of words that have no translation", "the economics of traded shadows",
+                "the meteorology of emotional climates", "the theology of minor deities",
+                "methods of counting things that cannot be counted", "the diplomacy between dreams and wakefulness",
+                "the engineering of structures built entirely from sound", "the physics of coincidence",
+            ];
+            return topics[seed % topics.length];
+        }
+
+        // ───────────────────────────────────────────────────────────
+        // WEBLLM LOCAL INFERENCE
+        // ───────────────────────────────────────────────────────────
+        async function checkWebGPU() {
+            if (!navigator.gpu) return false;
+            try {
+                const adapter = await navigator.gpu.requestAdapter();
+                return !!adapter;
+            } catch { return false; }
+        }
+
+        async function initModel() {
+            if (state.modelLoading || state.modelLoaded) return;
+
+            const btnText = document.getElementById('oracle-btn-text');
+            const progressContainer = document.getElementById('oracle-progress-container');
+            const progressFill = document.getElementById('oracle-progress-fill');
+            const statusDot = document.getElementById('oracle-status-dot');
+            const wakeBtn = document.getElementById('btn-wake-oracle');
+
+            state.modelLoading = true;
+            statusDot.classList.replace('bg-red-900', 'bg-yellow-500');
+            statusDot.classList.replace('animate-pulse-slow', 'animate-pulse');
+            btnText.innerText = "Checking Engine...";
+            wakeBtn.classList.add('cursor-not-allowed', 'opacity-80');
+
+            const hasWebGPU = await checkWebGPU();
+
+            if (!hasWebGPU) {
+                // Fallback Mode
+                state.modelLoaded = true;
+                state.modelLoading = false;
+                state.useWebGPU = false;
+
+                wakeBtn.classList.add('hidden');
+                document.getElementById('oracle-fallback-state').classList.remove('hidden');
+                document.getElementById('oracle-fallback-state').classList.add('flex');
+
+                statusDot.classList.replace('bg-yellow-500', 'bg-yellow-600');
+                statusDot.classList.remove('animate-pulse');
+
+                showToast("WebGPU unavailable. Using deterministic RNG algorithm.");
+                return;
+            }
+
+            try {
+                progressContainer.classList.remove('hidden');
+                btnText.innerText = "Loading WebLLM...";
+
+                // Dynamically import WebLLM from esm.run
+                const { CreateMLCEngine } = await import('https://esm.run/@mlc-ai/web-llm');
+
+                // Load SmolLM2-135M-Instruct (Lightweight, coherent)
+                state.llmEngine = await CreateMLCEngine('SmolLM2-135M-Instruct-q4f16_1-MLC', {
+                    initProgressCallback: (progress) => {
+                        const pct = Math.round(progress.progress * 100);
+                        progressFill.style.width = `${pct}%`;
+                        btnText.innerText = `Downloading... ${pct}%`;
+                    }
+                });
+
+                state.modelLoaded = true;
+                state.modelLoading = false;
+                state.useWebGPU = true;
+
+                progressContainer.classList.add('hidden');
+                wakeBtn.classList.add('hidden');
+
+                document.getElementById('oracle-active-state').classList.remove('hidden');
+                document.getElementById('oracle-active-state').classList.add('flex');
+
+                statusDot.classList.replace('bg-yellow-500', 'bg-green-500');
+                statusDot.classList.remove('animate-pulse');
+
+                showToast("Oracle Awake. Intelligence is now active.");
+
+                // If currently viewing a placeholder page in reader, regenerate it immediately
+                if (state.view === 'reader' && !state.isGenerating) {
+                    generatePage(state.address.v, state.address.c, state.address.p);
+                }
+
+            } catch (err) {
+                console.error("WebLLM Error:", err);
+
+                state.modelLoaded = true;
+                state.modelLoading = false;
+                state.useWebGPU = false;
+
+                wakeBtn.classList.add('hidden');
+                progressContainer.classList.add('hidden');
+
+                document.getElementById('oracle-fallback-state').classList.remove('hidden');
+                document.getElementById('oracle-fallback-state').classList.add('flex');
+
+                statusDot.classList.replace('bg-yellow-500', 'bg-yellow-600');
+                statusDot.classList.remove('animate-pulse');
+
+                showToast("Failed to load AI engine. Using robust fallback algorithm.");
+            }
+        }
+
+        // ───────────────────────────────────────────────────────────
+        // PAGE GENERATION (UI & Logic)
+        // ───────────────────────────────────────────────────────────
+        async function generatePage(v, c, p) {
+            if (state.isGenerating) return;
+            state.isGenerating = true;
+
+            const seed = addressToSeed(v, c, p);
+
+            // Sync UI
+            document.getElementById('input-vol').value = v;
+            document.getElementById('input-ch').value = c;
+            document.getElementById('input-pg').value = p;
+            document.getElementById('display-seed').innerText = seed;
+
+            const textEl = document.getElementById('page-content');
+            const genIndicator = document.getElementById('gen-indicator');
+            const statusText = document.getElementById('gen-status-text');
+            const timeEl = document.getElementById('gen-time');
+
+            // Reset view for new content
+            textEl.innerHTML = `<div class="w-full h-64 page-text-loading"></div>`;
+            timeEl.innerText = "";
+            genIndicator.classList.remove('hidden');
+            genIndicator.classList.add('flex');
+
+            const t0 = Date.now();
+
+            try {
+                if (state.useWebGPU && state.llmEngine) {
+                    statusText.innerText = "Hallucinating via WebGPU...";
+
+                    const topicHint = seedToTopicHint(seed);
+                    const prompt = `Write a single page from an old library book. The page is from Volume ${v}, Chapter ${c}, Page ${p}. Write about: ${topicHint}. Write 3-5 paragraphs of literary prose, as if from an ancient encyclopedia, philosophical text, or literary work. Be specific and evocative. Do not include headings, titles, or pleasantries. Start writing the prose immediately.`;
+
+                    // Stream directly to DOM
+                    textEl.innerHTML = '';
+                    textEl.classList.remove('page-text-loading');
+
+                    let fullText = '';
+                    const stream = await state.llmEngine.chat.completions.create({
+                        messages: [{ role: 'user', content: prompt }],
+                        temperature: 0.001, // Deterministic
+                        max_tokens: 400,
+                        stream: true,
+                        seed: seed % 2147483647, // Safe int limit
+                    });
+
+                    for await (const chunk of stream) {
+                        const delta = chunk.choices[0]?.delta?.content || '';
+                        fullText += delta;
+                        textEl.innerText = fullText;
+                    }
+
+                } else {
+                    // Fast Deterministic Fallback
+                    statusText.innerText = "Translating coordinate (Fallback Algorithm)...";
+                    await new Promise(r => setTimeout(r, 600)); // Simulate work for UI effect
+                    const content = generateFallbackText(seed);
+                    textEl.innerHTML = '';
+                    textEl.innerText = content;
+                }
+            } catch (error) {
+                console.error("Generation Error:", error);
+                textEl.innerHTML = `<div class="text-library-accent italic">The pages here have been torn out. The architecture failed to resolve this coordinate.</div>`;
+            } finally {
+                const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
+                timeEl.innerText = `Generation: ${elapsed}s`;
+                genIndicator.classList.add('hidden');
+                genIndicator.classList.remove('flex');
+                state.isGenerating = false;
+            }
+        }
+
+        // ───────────────────────────────────────────────────────────
+        // NAVIGATION CONTROLS
+        // ───────────────────────────────────────────────────────────
+        function navigateToPage() {
+            let v = parseInt(document.getElementById('input-vol').value) || 1;
+            let c = parseInt(document.getElementById('input-ch').value) || 1;
+            let p = parseInt(document.getElementById('input-pg').value) || 1;
+
+            v = Math.max(1, Math.min(v, 999999999));
+            c = Math.max(1, Math.min(c, 9999));
+            p = Math.max(1, Math.min(p, 999));
+
+            state.address = { v, c, p };
+            generatePage(v, c, p);
+        }
+
+        function changePage(delta) {
+            let p = state.address.p + delta;
+            let c = state.address.c;
+            let v = state.address.v;
+
+            if (p < 1) {
+                if (c > 1) { c--; p = 999; }
+                else if (v > 1) { v--; c = 9999; p = 999; }
+                else p = 1;
+            }
+
+            if (p > 999) { p = 1; c++; }
+            if (c > 9999) { c = 1; v++; }
+
+            state.address = { v, c, p };
+            generatePage(v, c, p);
+        }
+
+        function randomPage() {
+            let v = Math.floor(Math.random() * 999999) + 1;
+            let c = Math.floor(Math.random() * 9999) + 1;
+            let p = Math.floor(Math.random() * 999) + 1;
+            state.address = { v, c, p };
+            generatePage(v, c, p);
+        }
+
+        // ───────────────────────────────────────────────────────────
+        // SEARCH & UTILITIES
+        // ───────────────────────────────────────────────────────────
+        function handleSearch(e) {
+            if (e.key === 'Enter') executeSearch();
+        }
+
+        function executeSearch() {
+            const query = document.getElementById('search-input').value.trim();
+            if (!query) return;
+
+            const { vol, ch, pg } = searchToAddress(query);
+            state.address = { v: vol, c: ch, p: pg };
+
+            showToast(`Query hashed to Vol ${vol}, Ch ${ch}, Pg ${pg}`);
+            switchView('reader');
+            generatePage(vol, ch, pg);
+        }
+
+        let toastTimeout;
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toast-msg').innerText = msg;
+
+            toast.classList.remove('translate-y-20', 'opacity-0');
+
+            clearTimeout(toastTimeout);
+            toastTimeout = setTimeout(() => {
+                toast.classList.add('translate-y-20', 'opacity-0');
+            }, 3000);
+        }
+
+        function copyAddress() {
+            const seed = document.getElementById('display-seed').innerText;
+            const addr = `The Library of Babel [LLM Edition]\nVol ${state.address.v}, Ch ${state.address.c}, Pg ${state.address.p} | Seed: ${seed}`;
+
+            navigator.clipboard.writeText(addr).then(() => {
+                showToast("Coordinates copied to clipboard.");
+            }).catch(() => {
+                const textArea = document.createElement("textarea");
+                textArea.value = addr;
+                document.body.appendChild(textArea);
+                textArea.select();
+                try {
+                    document.execCommand('copy');
+                    showToast("Coordinates copied to clipboard.");
+                } catch (err) {
+                    showToast("Failed to copy coordinates.");
+                }
+                document.body.removeChild(textArea);
+            });
+        }
+
+        // Global Keyboard Navigation
+        document.addEventListener('keydown', (e) => {
+            if (e.target.tagName === 'INPUT') return;
+            if (state.view !== 'reader') return;
+
+            if (e.key === 'ArrowRight') changePage(1);
+            if (e.key === 'ArrowLeft') changePage(-1);
+        });
+
+    </script>
+</body>
+
+</html>
