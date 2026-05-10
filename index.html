@@ -100,6 +100,10 @@
         class="w-full text-library-muted text-left px-4 py-3 rounded border-l-2 border-transparent transition-all flex items-center gap-3 hover:text-library-text text-sm">
         <i data-lucide="scroll" class="w-4 h-4"></i> Philosophy
       </button>
+      <button onclick="switchView('settings')" id="nav-settings"
+        class="w-full text-library-muted text-left px-4 py-3 rounded border-l-2 border-transparent transition-all flex items-center gap-3 hover:text-library-text text-sm">
+        <i data-lucide="settings" class="w-4 h-4"></i> Settings
+      </button>
     </nav>
 
     <!-- Oracle status -->
@@ -373,6 +377,67 @@
           <span class="text-xs mt-3 block text-library-muted/50 font-mono not-italic">— Jorge Luis Borges, The Library
             of Babel</span>
         </p>
+      </div>
+    </section>
+
+    <!-- VIEW: SETTINGS -->
+    <section id="view-settings" class="hidden flex-1 overflow-y-auto p-8 animate-fade-in max-w-3xl mx-auto w-full">
+      <div class="mb-12">
+        <h2 class="font-serif text-3xl mb-2 text-library-text">Oracle Configuration</h2>
+        <p class="text-library-muted text-sm">Adjust the intelligence behind the infinite library.</p>
+      </div>
+
+      <div class="space-y-8">
+        <!-- Engine Toggle -->
+        <div class="bg-library-panel border border-library-border p-6 rounded-lg">
+          <h3 class="text-library-accent font-serif text-lg mb-4">Inference Engine</h3>
+          <div class="flex flex-col gap-4">
+            <label class="flex items-center gap-3 cursor-pointer">
+              <input type="radio" name="engine-type" value="local" checked class="accent-library-accent" onchange="toggleEngineType()">
+              <span class="text-sm text-library-text">Local WebGPU (WebLLM)</span>
+            </label>
+            <label class="flex items-center gap-3 cursor-pointer">
+              <input type="radio" name="engine-type" value="api" class="accent-library-accent" onchange="toggleEngineType()">
+              <span class="text-sm text-library-text">External API (OpenAI Compatible)</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Local Model Select -->
+        <div id="settings-local" class="bg-library-panel border border-library-border p-6 rounded-lg">
+          <h3 class="text-library-accent font-serif text-lg mb-4">Local Model Selection</h3>
+          <p class="text-xs text-library-muted mb-4">Choose a model to download and run locally. Larger models require more VRAM and memory. If the model fails to load, try a smaller quantized model (-q4 or -q0).</p>
+          <select id="select-local-model" class="w-full bg-library-bg border border-library-border rounded px-4 py-3 text-sm text-library-text focus:outline-none focus:border-library-accent">
+            <!-- Populated by JS -->
+          </select>
+          <button onclick="saveLocalModel()" class="mt-4 bg-library-border hover:bg-library-accent hover:text-library-bg text-library-text px-4 py-2 rounded text-xs font-bold transition-colors">
+            Apply Local Model
+          </button>
+        </div>
+
+        <!-- API Settings -->
+        <div id="settings-api" class="bg-library-panel border border-library-border p-6 rounded-lg hidden">
+          <h3 class="text-library-accent font-serif text-lg mb-4">External API Settings</h3>
+          <p class="text-xs text-library-muted mb-4">Connect to a remote inference endpoint. Supports any OpenAI-compatible API (e.g. OpenAI, Together, Groq, Ollama).</p>
+          
+          <div class="space-y-4">
+            <div>
+              <label class="block text-xs uppercase tracking-wider text-library-muted mb-1">API URL Endpoint</label>
+              <input type="text" id="input-api-url" placeholder="https://api.openai.com/v1" class="w-full bg-library-bg border border-library-border rounded px-4 py-2 text-sm text-library-text focus:outline-none focus:border-library-accent">
+            </div>
+            <div>
+              <label class="block text-xs uppercase tracking-wider text-library-muted mb-1">Model Name</label>
+              <input type="text" id="input-api-model" placeholder="gpt-4o-mini" class="w-full bg-library-bg border border-library-border rounded px-4 py-2 text-sm text-library-text focus:outline-none focus:border-library-accent">
+            </div>
+            <div>
+              <label class="block text-xs uppercase tracking-wider text-library-muted mb-1">API Key</label>
+              <input type="password" id="input-api-key" placeholder="sk-..." class="w-full bg-library-bg border border-library-border rounded px-4 py-2 text-sm text-library-text focus:outline-none focus:border-library-accent">
+            </div>
+          </div>
+          <button onclick="saveApiSettings()" class="mt-4 bg-library-border hover:bg-library-accent hover:text-library-bg text-library-text px-4 py-2 rounded text-xs font-bold transition-colors">
+            Save & Connect API
+          </button>
+        </div>
       </div>
     </section>
 

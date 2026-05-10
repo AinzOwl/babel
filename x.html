@@ -1,878 +1,1202 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>The Library of Babel</title>
-
-    <!-- Fonts -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link
-        href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=IBM+Plex+Mono:ital,wght@0,300;0,400;0,500;1,300&display=swap"
-        rel="stylesheet">
-
-    <!-- Icons (Lucide) -->
-    <script src="https://unpkg.com/lucide@latest"></script>
-
-    <!-- Tailwind CSS -->
+    <title>3D Procedural Library Chamber - Sketch Style</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        library: {
-                            bg: '#0c0b0a',       /* Deep dark brown/black */
-                            panel: '#151311',    /* Slightly lighter panel */
-                            border: '#2a2622',   /* Muted border */
-                            text: '#d8cfbe',     /* Parchment text */
-                            muted: '#827a6f',    /* Dimmed text */
-                            accent: '#d67c53',   /* The copper/orange accent from original */
-                            accentHover: '#e8946f'
-                        }
-                    },
-                    fontFamily: {
-                        serif: ['Cinzel', 'serif'],
-                        mono: ['"IBM Plex Mono"', 'monospace'],
-                    },
-                    animation: {
-                        'fade-in': 'fadeIn 0.8s ease-out forwards',
-                        'pulse-slow': 'pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-                        'shimmer': 'shimmer 1.5s ease-in-out infinite',
-                    },
-                    keyframes: {
-                        fadeIn: {
-                            '0%': { opacity: '0', transform: 'translateY(10px)' },
-                            '100%': { opacity: '1', transform: 'translateY(0)' },
-                        },
-                        shimmer: {
-                            '0%': { backgroundPosition: '-200% 0' },
-                            '100%': { backgroundPosition: '200% 0' }
-                        }
-                    }
-                }
-            }
-        }
-    </script>
-
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
     <style>
-        /* Custom Scrollbar */
-        ::-webkit-scrollbar {
-            width: 8px;
-            height: 8px;
-        }
-
-        ::-webkit-scrollbar-track {
-            background: #0c0b0a;
-        }
-
-        ::-webkit-scrollbar-thumb {
-            background: #2a2622;
-            border-radius: 4px;
-        }
-
-        ::-webkit-scrollbar-thumb:hover {
-            background: #d67c53;
-        }
-
-        /* Selection */
-        ::selection {
-            background: rgba(214, 124, 83, 0.3);
-            color: #fff;
-        }
-
-        /* Subtle noise texture overlay */
-        .noise-bg {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            pointer-events: none;
-            z-index: 50;
-            opacity: 0.03;
-            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
-        }
-
-        /* Input styling overrides */
-        input[type="number"]::-webkit-inner-spin-button,
-        input[type="number"]::-webkit-outer-spin-button {
-            -webkit-appearance: none;
-            margin: 0;
-        }
-
-        .nav-active {
-            color: #d67c53;
-            border-left-color: #d67c53;
-            background: linear-gradient(90deg, rgba(214, 124, 83, 0.1) 0%, rgba(21, 19, 17, 0) 100%);
-        }
-
-        /* Loader specific styles */
-        .page-text-loading {
-            color: transparent !important;
-            position: relative;
-        }
-
-        .page-text-loading::after {
-            content: '';
+        body { margin: 0; overflow: hidden; background-color: #f0eee6; font-family: 'Inter', sans-serif; cursor: default; }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        
+        /* Procedural Paper Texture Overlay */
+        .paper-overlay {
             position: absolute;
             inset: 0;
-            background: repeating-linear-gradient(90deg,
-                    rgba(42, 38, 34, 0.3) 0%,
-                    rgba(42, 38, 34, 0.8) 50%,
-                    rgba(42, 38, 34, 0.3) 100%);
-            background-size: 200% 100%;
-            animation: shimmer 1.5s ease-in-out infinite;
-            border-radius: 4px;
+            pointer-events: none;
+            mix-blend-mode: multiply;
+            opacity: 0.6;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.15'/%3E%3C/svg%3E");
+        }
+        
+        /* Subtle vignette */
+        .vignette {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            background: radial-gradient(circle at center, transparent 40%, rgba(30, 20, 10, 0.15) 100%);
+        }
+
+        /* Loading / Transition Overlay */
+        #transition-overlay {
+            position: absolute;
+            inset: 0;
+            background: #f0eee6;
+            z-index: 50;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        #nav-tooltip {
+            position: absolute;
+            pointer-events: none;
+            background: rgba(20, 15, 10, 0.85);
+            color: #f0eee6;
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            opacity: 0;
+            transition: opacity 0.15s ease;
+            transform: translate(-50%, -150%);
+            z-index: 40;
+            backdrop-filter: blur(4px);
         }
     </style>
 </head>
+<body class="text-slate-800 antialiased selection:bg-slate-300 flex h-screen w-screen overflow-hidden">
 
-<body class="bg-library-bg text-library-text font-mono h-screen overflow-hidden flex flex-col md:flex-row antialiased">
-    <div class="noise-bg"></div>
-
-    <!-- Sidebar Navigation -->
-    <aside
-        class="w-full md:w-64 border-b md:border-b-0 md:border-r border-library-border bg-library-panel flex flex-col flex-shrink-0 relative z-20">
-        <div class="p-6 md:p-8 flex items-center gap-3">
-            <i data-lucide="library" class="text-library-accent w-6 h-6"></i>
-            <div>
-                <h1 class="font-serif text-lg font-bold tracking-wider leading-none">Library<br><span
-                        class="text-xs text-library-muted tracking-widest font-mono font-normal uppercase">Of
-                        Babel</span></h1>
-                <div class="text-[9px] text-library-accent mt-1 tracking-widest uppercase">LLM Edition</div>
+    <!-- Left Sidebar UI -->
+    <div class="w-80 bg-white/95 backdrop-blur-md shadow-[4px_0_24px_rgba(0,0,0,0.05)] border-r border-slate-200/60 flex flex-col z-10 flex-shrink-0 relative">
+        <div class="p-6 border-b border-slate-100 flex-shrink-0">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h1 class="text-xl font-bold tracking-tight text-slate-900 leading-tight">Library of Babel</h1>
+                    <p class="text-xs uppercase tracking-wider font-semibold text-slate-500 mt-1">Infinite Explorer</p>
+                </div>
+                <button id="btn-generate" class="bg-slate-900 text-white p-2.5 rounded-xl hover:bg-slate-700 active:scale-95 transition-all shadow-md flex-shrink-0" title="Teleport to Random Chamber">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
+                </button>
+            </div>
+            <div class="mt-4 pt-4 border-t border-slate-100 flex flex-col gap-2">
+                <label for="val-address" class="text-xs font-bold text-slate-500 uppercase tracking-wider">Chamber Address</label>
+                <input type="text" id="val-address" class="w-full bg-slate-100/50 border border-slate-200/80 rounded-lg px-3 py-2 text-[13px] font-mono text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-800 focus:bg-white transition-all" spellcheck="false">
             </div>
         </div>
 
-        <nav class="flex-1 px-4 space-y-2 mt-4 md:mt-8 overflow-y-auto">
-            <button onclick="switchView('home')" id="nav-home"
-                class="nav-active w-full text-left px-4 py-3 rounded border-l-2 border-transparent transition-all flex items-center gap-3 hover:text-library-text text-sm">
-                <i data-lucide="compass" class="w-4 h-4"></i> The Grand Hall
-            </button>
-            <button onclick="switchView('reader')" id="nav-reader"
-                class="w-full text-library-muted text-left px-4 py-3 rounded border-l-2 border-transparent transition-all flex items-center gap-3 hover:text-library-text text-sm">
-                <i data-lucide="book-open" class="w-4 h-4"></i> The Archive
-            </button>
-            <button onclick="switchView('search')" id="nav-search"
-                class="w-full text-library-muted text-left px-4 py-3 rounded border-l-2 border-transparent transition-all flex items-center gap-3 hover:text-library-text text-sm">
-                <i data-lucide="search" class="w-4 h-4"></i> The Index
-            </button>
-            <button onclick="switchView('about')" id="nav-about"
-                class="w-full text-library-muted text-left px-4 py-3 rounded border-l-2 border-transparent transition-all flex items-center gap-3 hover:text-library-text text-sm">
-                <i data-lucide="scroll" class="w-4 h-4"></i> Philosophy
-            </button>
-        </nav>
-
-        <!-- Oracle Status -->
-        <div class="p-6 border-t border-library-border mt-auto">
-            <div
-                class="text-[10px] text-library-muted mb-3 uppercase tracking-widest flex items-center justify-between">
-                <span>The Oracle</span>
-                <span id="oracle-status-dot" class="w-2 h-2 rounded-full bg-red-900 animate-pulse-slow"
-                    title="Model inactive"></span>
-            </div>
-
-            <button id="btn-wake-oracle" onclick="initModel()"
-                class="w-full py-2 px-3 border border-library-accent text-library-accent rounded text-xs hover:bg-library-accent hover:text-library-bg transition-colors flex justify-center items-center gap-2">
-                <i data-lucide="cpu" class="w-3 h-3"></i> <span id="oracle-btn-text">Wake Intelligence</span>
-            </button>
-
-            <div id="oracle-progress-container" class="hidden mt-2">
-                <div class="w-full h-1 bg-library-bg rounded overflow-hidden">
-                    <div id="oracle-progress-fill" class="h-full bg-library-accent w-0 transition-all duration-300">
-                    </div>
+        <div class="flex-grow overflow-y-auto p-6 space-y-7">
+            <!-- Active Layout Display -->
+            <div class="bg-slate-50 p-4 rounded-xl border border-slate-200/80 shadow-inner">
+                <div class="text-xs font-bold uppercase tracking-wider text-slate-500 mb-3 flex items-center gap-2">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
+                    Architecture
+                </div>
+                <div id="layout-readout" class="grid grid-cols-2 gap-x-2 gap-y-3 text-xs font-medium text-slate-700">
+                    <!-- Readout injected by JS -->
                 </div>
             </div>
 
-            <div id="oracle-active-state" class="hidden flex-col gap-1 mt-2">
-                <div class="text-xs text-green-600/80 flex items-center gap-2">
-                    <i data-lucide="check-circle" class="w-3 h-3"></i> Intelligence Active
+            <!-- Parameters (Now read-only, determined by address) -->
+            <div class="space-y-6 opacity-70 pointer-events-none">
+                <div>
+                    <label class="flex justify-between text-xs font-bold text-slate-700 mb-2">
+                        <span>Center Structure</span>
+                        <span id="val-center" class="text-slate-500 capitalize"></span>
+                    </label>
                 </div>
-                <div id="oracle-engine-text" class="text-[10px] text-library-muted">SmolLM2 135M (Local WebGPU)</div>
-            </div>
 
-            <div id="oracle-fallback-state" class="hidden flex-col gap-1 mt-2">
-                <div class="text-[11px] text-yellow-600/80 flex items-center gap-2">
-                    <i data-lucide="alert-circle" class="w-3 h-3"></i> Fallback Mode
+                <div>
+                    <label class="flex justify-between text-xs font-bold text-slate-700 mb-2">
+                        <span>Chamber Radius</span>
+                        <span id="val-radius" class="text-slate-500"></span>
+                    </label>
+                    <input type="range" id="param-radius" min="400" max="750" class="w-full accent-slate-800" disabled>
                 </div>
-                <div class="text-[10px] text-library-muted leading-tight">WebGPU unavailable. Using deterministic RNG
-                    algorithm.</div>
+
+                <div>
+                    <label class="flex justify-between text-xs font-bold text-slate-700 mb-2">
+                        <span>Ceiling Height</span>
+                        <span id="val-height" class="text-slate-500"></span>
+                    </label>
+                    <input type="range" id="param-height" min="250" max="500" class="w-full accent-slate-800" disabled>
+                </div>
+
+                <div>
+                    <label class="flex justify-between text-xs font-bold text-slate-700 mb-2">
+                        <span>Sketch Roughness</span>
+                        <span id="val-roughness" class="text-slate-500"></span>
+                    </label>
+                    <input type="range" id="param-roughness" min="0" max="3" step="0.2" class="w-full accent-slate-800" disabled>
+                </div>
+                
+                <div>
+                    <label class="flex justify-between text-xs font-bold text-slate-700 mb-2">
+                        <span>Ink Density</span>
+                        <span id="val-density" class="text-slate-500"></span>
+                    </label>
+                    <input type="range" id="param-density" min="1" max="4" step="1" class="w-full accent-slate-800" disabled>
+                </div>
             </div>
         </div>
-    </aside>
-
-    <!-- Main Content Area -->
-    <main class="flex-1 h-full overflow-y-auto relative bg-library-bg z-10 flex flex-col scroll-smooth">
-
-        <!-- VIEW: HOME (The Grand Hall) -->
-        <section id="view-home"
-            class="flex-1 flex flex-col items-center justify-center p-8 animate-fade-in max-w-4xl mx-auto w-full">
-            <i data-lucide="crosshair" class="w-12 h-12 text-library-accent mb-8 opacity-80"></i>
-            <h2
-                class="font-serif text-4xl md:text-5xl lg:text-6xl text-center mb-6 text-transparent bg-clip-text bg-gradient-to-b from-library-text to-library-muted pb-2">
-                The Library of Babel</h2>
-            <div class="text-library-accent tracking-widest text-sm uppercase mb-6">LLM Edition</div>
-            <p class="text-library-muted text-center max-w-2xl leading-relaxed mb-12 text-sm md:text-base">
-                An infinite repository of knowledge, each page uniquely addressed by volume, chapter, and page number.
-                Every address resolves to the exact same text—always—without a database. The meaning is hallucinated
-                into existence by algorithmic intelligence within your browser.
-            </p>
-
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-2xl">
-                <button onclick="switchView('reader')"
-                    class="group p-6 border border-library-border bg-library-panel hover:border-library-accent rounded-lg transition-all text-left">
-                    <h3
-                        class="text-library-accent font-serif text-xl mb-2 group-hover:translate-x-1 transition-transform">
-                        Enter the Archive &rarr;</h3>
-                    <p class="text-xs text-library-muted leading-relaxed">Navigate directly via dimensional coordinates
-                        (Volume, Chapter, Page) or wander at random.</p>
-                </button>
-                <button onclick="switchView('search')"
-                    class="group p-6 border border-library-border bg-library-panel hover:border-library-accent rounded-lg transition-all text-left">
-                    <h3
-                        class="text-library-accent font-serif text-xl mb-2 group-hover:translate-x-1 transition-transform">
-                        Consult the Index &rarr;</h3>
-                    <p class="text-xs text-library-muted leading-relaxed">Provide a thought or query. The Index will
-                        mathematically hash your intent into a permanent deterministic coordinate.</p>
-                </button>
+        
+        <div class="p-4 border-t border-slate-100 flex-shrink-0">
+            <div class="text-[10px] text-slate-500 text-center leading-relaxed font-medium flex flex-col gap-1">
+                <span><strong class="text-slate-800">Click passage floors/stairs</strong> to navigate.</span>
+                <span>Click bookshelves to zoom in and read.</span>
             </div>
-        </section>
+        </div>
+    </div>
 
-        <!-- VIEW: READER (The Archive) -->
-        <section id="view-reader" class="hidden flex-1 flex flex-col w-full h-full animate-fade-in relative">
-
-            <!-- Address Navigator Bar -->
-            <div class="bg-library-panel border-b border-library-border p-4 sticky top-0 z-10 shadow-md">
-                <div class="max-w-4xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
-
-                    <div class="flex items-center gap-2 text-sm text-library-muted w-full md:w-auto overflow-x-auto">
-                        <div
-                            class="flex items-center bg-library-bg border border-library-border rounded px-3 py-1.5 focus-within:border-library-accent transition-colors">
-                            <span class="mr-2 uppercase tracking-wider text-xs">Vol</span>
-                            <input type="number" id="input-vol" value="1" min="1" max="999999999"
-                                class="bg-transparent w-20 outline-none text-library-text text-center"
-                                onchange="navigateToPage()">
-                        </div>
-                        <span class="text-library-border">&times;</span>
-                        <div
-                            class="flex items-center bg-library-bg border border-library-border rounded px-3 py-1.5 focus-within:border-library-accent transition-colors">
-                            <span class="mr-2 uppercase tracking-wider text-xs">Ch</span>
-                            <input type="number" id="input-ch" value="1" min="1" max="9999"
-                                class="bg-transparent w-16 outline-none text-library-text text-center"
-                                onchange="navigateToPage()">
-                        </div>
-                        <span class="text-library-border">&times;</span>
-                        <div
-                            class="flex items-center bg-library-bg border border-library-border rounded px-3 py-1.5 focus-within:border-library-accent transition-colors">
-                            <span class="mr-2 uppercase tracking-wider text-xs">Pg</span>
-                            <input type="number" id="input-pg" value="1" min="1" max="999"
-                                class="bg-transparent w-16 outline-none text-library-text text-center"
-                                onchange="navigateToPage()">
-                        </div>
-                        <button onclick="navigateToPage()"
-                            class="ml-2 bg-library-border hover:bg-library-accent hover:text-library-bg text-library-text px-3 py-1.5 rounded text-xs transition-colors">
-                            Go
-                        </button>
-                    </div>
-
-                    <div class="flex items-center gap-3 shrink-0">
-                        <button onclick="randomPage()"
-                            class="text-xs border border-library-border hover:border-library-accent hover:text-library-accent px-4 py-2 rounded transition-colors flex items-center gap-2">
-                            <i data-lucide="shuffle" class="w-3 h-3"></i> Random
-                        </button>
-                        <button onclick="copyAddress()"
-                            class="text-xs bg-library-accent/10 text-library-accent hover:bg-library-accent hover:text-library-bg px-4 py-2 rounded transition-colors flex items-center gap-2">
-                            <i data-lucide="copy" class="w-3 h-3"></i> Copy
-                        </button>
-                    </div>
-
-                </div>
-            </div>
-
-            <!-- The Book Page -->
-            <div class="flex-1 overflow-y-auto p-6 md:p-12 relative flex justify-center">
-                <div
-                    class="max-w-3xl w-full bg-[#11100e] border border-library-border rounded shadow-2xl p-8 md:p-16 min-h-[60vh] relative flex flex-col">
-
-                    <div
-                        class="absolute top-4 right-6 text-[10px] text-library-muted/50 uppercase tracking-widest font-mono">
-                        Seed: <span id="display-seed">—</span>
-                    </div>
-
-                    <!-- Reading Content -->
-                    <div id="page-content"
-                        class="text-library-text leading-loose space-y-6 text-sm md:text-base font-serif whitespace-pre-wrap flex-1 transition-opacity duration-300">
-                        <div class="text-center text-library-muted italic mt-20 flex flex-col items-center gap-4">
-                            Enter an address above, or click "Random" to begin your journey through the infinite
-                            library...
-                        </div>
-                    </div>
-
-                    <!-- Generation Indicator -->
-                    <div id="gen-indicator"
-                        class="hidden items-center gap-2 text-xs text-library-accent mt-8 opacity-80">
-                        <i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i>
-                        <span id="gen-status-text">Translating coordinate...</span>
-                    </div>
-
-                </div>
-            </div>
-
-            <!-- Bottom Pagination -->
-            <div class="border-t border-library-border bg-library-bg p-4 flex justify-between items-center px-8">
-                <div class="text-xs text-library-muted/50 w-32" id="gen-time"></div>
-                <div class="flex gap-8">
-                    <button onclick="changePage(-1)"
-                        class="text-library-muted hover:text-library-accent flex items-center gap-2 text-sm transition-colors">
-                        <i data-lucide="arrow-left" class="w-4 h-4"></i> Previous Page
-                    </button>
-                    <button onclick="changePage(1)"
-                        class="text-library-muted hover:text-library-accent flex items-center gap-2 text-sm transition-colors">
-                        Next Page <i data-lucide="arrow-right" class="w-4 h-4"></i>
-                    </button>
-                </div>
-                <div class="w-32"></div> <!-- Spacer for balance -->
-            </div>
-        </section>
-
-        <!-- VIEW: SEARCH (The Index) -->
-        <section id="view-search"
-            class="hidden flex-1 flex flex-col items-center justify-center p-8 animate-fade-in w-full max-w-3xl mx-auto">
-            <i data-lucide="search" class="w-10 h-10 text-library-muted mb-6"></i>
-            <h2 class="font-serif text-3xl mb-2 text-center">The Index</h2>
-            <p class="text-library-muted text-sm text-center mb-10">Translate a thought into a permanent coordinate
-                within the infinite library.</p>
-
-            <div class="w-full relative">
-                <input type="text" id="search-input"
-                    placeholder="e.g., 'The origin of stars', 'A recipe for moonlight'..."
-                    class="w-full bg-library-panel border border-library-border rounded-lg px-6 py-5 text-library-text focus:outline-none focus:border-library-accent transition-colors placeholder-library-muted/50 text-sm md:text-base pr-32"
-                    onkeypress="handleSearch(event)">
-                <button onclick="executeSearch()"
-                    class="absolute right-2 top-2 bottom-2 bg-library-accent text-library-bg font-bold px-6 rounded hover:bg-library-accentHover transition-colors flex items-center gap-2 text-sm">
-                    Locate <i data-lucide="arrow-right" class="w-4 h-4"></i>
-                </button>
-            </div>
-            <div class="mt-8 text-xs text-library-muted/70 text-center max-w-xl leading-relaxed">
-                The Index mathematically hashes your query into a deterministic address. The exact same query will
-                always reveal the exact same volume, chapter, and page across all time, acting as a permanent pointer to
-                generated meaning.
-            </div>
-        </section>
-
-        <!-- VIEW: ABOUT (Philosophy) -->
-        <section id="view-about"
-            class="hidden flex-1 flex flex-col p-8 md:p-16 animate-fade-in w-full max-w-5xl mx-auto overflow-y-auto">
-            <div class="mb-12">
-                <h2 class="font-serif text-3xl mb-4 text-library-accent">Architecture of the Infinite</h2>
-                <p class="text-library-text leading-relaxed text-sm md:text-base max-w-3xl">
-                    Unlike standard databases, this library stores nothing. The text you read is hallucinated into
-                    existence in real-time by a Large Language Model (or a procedural algorithm) running entirely within
-                    your browser. By tying the generation strict deterministic constraints, the hallucination becomes
-                    permanent.
-                </p>
-            </div>
-
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-12">
-
-                <div class="bg-library-panel border border-library-border p-6 rounded-lg">
-                    <i data-lucide="hash" class="w-6 h-6 text-library-accent mb-4"></i>
-                    <h3 class="font-serif text-lg mb-2 text-library-text">The Mechanism of Hashing</h3>
-                    <p class="text-xs text-library-muted leading-relaxed">
-                        Every coordinate (Volume, Chapter, Page) undergoes a bitwise hashing collision-resistant
-                        algorithm to produce a unique 32-bit integer seed. This means the address space gives roughly
-                        999 billion uniquely seeded pages. Every address is valid, and no page is ever repeated unless
-                        you return to the exact same address.
-                    </p>
-                </div>
-
-                <div class="bg-library-panel border border-library-border p-6 rounded-lg">
-                    <i data-lucide="cpu" class="w-6 h-6 text-library-accent mb-4"></i>
-                    <h3 class="font-serif text-lg mb-2 text-library-text">Local WebGPU Inference</h3>
-                    <p class="text-xs text-library-muted leading-relaxed">
-                        When "Intelligence" is awakened, a compressed 1.7 Billion parameter Large Language Model
-                        (SmolLM2) is downloaded into your browser's IndexedDB. By utilizing WebGPU, the matrix
-                        multiplications required for AI generation run purely on your local hardware. No text leaves
-                        your device, no API keys are used, and there is no server-side cost.
-                    </p>
-                </div>
-
-                <div class="bg-library-panel border border-library-border p-6 rounded-lg">
-                    <i data-lucide="snowflake" class="w-6 h-6 text-library-accent mb-4"></i>
-                    <h3 class="font-serif text-lg mb-2 text-library-text">Zero-Temperature Determinism</h3>
-                    <p class="text-xs text-library-muted leading-relaxed">
-                        To guarantee permanence, the LLM receives the deterministic seed generated from your address,
-                        and generates text at exactly `Temperature=0.001`. Because both the seed and the sampling
-                        temperature are fixed, the mathematical output of the neural network is completely constrained.
-                        It will always dream the exact same sequence of tokens for that given address.
-                    </p>
-                </div>
-
-                <div class="bg-library-panel border border-library-border p-6 rounded-lg">
-                    <i data-lucide="shield-alert" class="w-6 h-6 text-library-accent mb-4"></i>
-                    <h3 class="font-serif text-lg mb-2 text-library-text">The Procedural Fallback</h3>
-                    <p class="text-xs text-library-muted leading-relaxed">
-                        If your browser lacks WebGPU support (or you choose not to download the model weights), the
-                        Library gracefully degrades to a procedural "Pseudo-LLM". It uses an implementation of the
-                        XORShift32 seeded random number generator to construct Borges-esque literary prose from a
-                        localized grammar dictionary. It retains the exact same mathematical permanence as the AI
-                        engine.
-                    </p>
-                </div>
-
-            </div>
-
-            <div class="border-t border-library-border pt-8 mt-auto text-center">
-                <p class="font-serif italic text-library-muted text-sm max-w-2xl mx-auto leading-relaxed">
-                    "The Library exists ab aeterno. This truth, whose immediate corollary is the future eternity of the
-                    world, cannot be doubted by any reasonable mind."<br>
-                    <span class="text-xs mt-3 block text-library-muted/50 font-mono not-italic">— Jorge Luis Borges, The
-                        Library of Babel</span>
-                </p>
-            </div>
-        </section>
-
-    </main>
-
-    <!-- Notification Toast -->
-    <div id="toast"
-        class="fixed bottom-4 right-4 bg-library-panel border border-library-accent text-library-text px-4 py-3 rounded shadow-lg transform translate-y-20 opacity-0 transition-all duration-300 z-50 flex items-center gap-3">
-        <i data-lucide="info" class="w-4 h-4 text-library-accent"></i>
-        <span id="toast-msg" class="text-sm">Message</span>
+    <!-- Main 3D Canvas Area -->
+    <div class="flex-grow relative h-full w-full bg-[#f0eee6]">
+        <canvas id="three-canvas" class="block w-full h-full"></canvas>
+        <div class="paper-overlay"></div>
+        <div class="vignette"></div>
+        <div id="transition-overlay"></div>
+        <div id="nav-tooltip"></div>
+        
+        <!-- DOM Overlay for Book Spine Labels -->
+        <div id="book-labels" class="absolute top-0 left-0 w-full h-full pointer-events-none overflow-hidden z-20"></div>
     </div>
 
     <script>
-        // ───────────────────────────────────────────────────────────
-        // INITIALIZATION
-        // ───────────────────────────────────────────────────────────
-        lucide.createIcons();
+        // --- Massive UTF-8 Printable Charset for Infinite Addressing ---
+        let charset = "";
+        for (let i = 33; i <= 126; i++) charset += String.fromCharCode(i);           // Basic Latin
+        for (let i = 161; i <= 255; i++) charset += String.fromCharCode(i);          // Latin-1 Supplement
+        for (let i = 0x0400; i <= 0x04FF; i++) charset += String.fromCharCode(i);    // Cyrillic
+        for (let i = 0x3041; i <= 0x30FF; i++) charset += String.fromCharCode(i);    // Hiragana & Katakana
+        for (let i = 0x4E00; i <= 0x6000; i++) charset += String.fromCharCode(i);    // CJK Unified Ideographs
+        
+        const BASE = BigInt(charset.length);
 
-        let state = {
-            view: 'home',
-            modelLoaded: false,
-            modelLoading: false,
-            useWebGPU: false,
-            llmEngine: null,
-            address: { v: 1, c: 1, p: 1 },
-            isGenerating: false
+        function encodeAddress(numBigInt) {
+            if (numBigInt === BigInt(0)) return charset[0];
+            let str = "";
+            let temp = numBigInt;
+            while (temp > BigInt(0)) {
+                str = charset[Number(temp % BASE)] + str;
+                temp = temp / BASE;
+            }
+            return str;
+        }
+
+        function decodeAddress(str) {
+            let num = BigInt(0);
+            for (let i = 0; i < str.length; i++) {
+                let idx = charset.indexOf(str[i]);
+                if (idx === -1) return BigInt(1); 
+                num = num * BASE + BigInt(idx);
+            }
+            return num === BigInt(0) ? BigInt(1) : num;
+        }
+
+        function hashBigInt(n) {
+            let hash = 0x811c9dc5;
+            let str = n.toString();
+            for (let i = 0; i < str.length; i++) {
+                hash ^= str.charCodeAt(i);
+                hash = Math.imul(hash, 0x01000193);
+            }
+            return hash >>> 0;
+        }
+
+        function mulberry32(a) {
+            return function() {
+              var t = a += 0x6D2B79F5;
+              t = Math.imul(t ^ t >>> 15, t | 1);
+              t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+              return ((t ^ t >>> 14) >>> 0) / 4294967296;
+            }
+        }
+
+        // Generate Procedural Infinite Book Title
+        function generateBookTitle(rng) {
+            let title = "";
+            const maxLength = 200; // Visual/Alert truncation limit
+            
+            // Generate words indefinitely until it reaches the truncation limit
+            while (title.length < maxLength) {
+                // Minimum 3 characters, maximum 8 characters per word
+                let wordLen = Math.floor(rng() * 6) + 3; 
+                let word = "";
+                for (let j=0; j<wordLen; j++) {
+                    word += charset[Math.floor(rng() * charset.length)];
+                }
+                title += word + " ";
+            }
+            return title.trim() + "...";
+        }
+
+        // --- State & Config ---
+        let config = {
+            currentAddress: BigInt(1), 
+            radius: 400,
+            wellRadius: 150,
+            height: 250,
+            depth: 180,
+            roughness: 1.0,
+            density: 2,
+            centerType: 'OPEN',
+            centerSides: 6,
+            spiralMode: 'up',
+            layout: [] 
         };
 
-        // ───────────────────────────────────────────────────────────
-        // VIEW NAVIGATION
-        // ───────────────────────────────────────────────────────────
-        function switchView(viewName) {
-            document.querySelectorAll('nav button').forEach(btn => {
-                btn.classList.remove('nav-active', 'text-library-text');
-                btn.classList.add('text-library-muted');
-            });
-            const activeBtn = document.getElementById(`nav-${viewName}`);
-            if (activeBtn) {
-                activeBtn.classList.add('nav-active', 'text-library-text');
-                activeBtn.classList.remove('text-library-muted');
+        const COLOR_PAPER = 0xf0eee6;
+        const COLOR_FILL_LIGHT = 0xe5e3da;
+        const COLOR_FILL_MID = 0xdbd8ce;
+        const COLOR_FILL_DARK = 0xcfccc2;
+        const COLOR_ABYSS = 0xcfcbc2;
+        const COLOR_PILLAR = 0x1c1a17;
+        const COLOR_BOOK_1 = 0xefede5;
+        const COLOR_BOOK_2 = 0xe8e5dc;
+        const COLOR_BOOK_3 = 0xd8d5cc;
+
+        const cVec = (hex, opacity=1) => {
+            const c = new THREE.Color(hex);
+            if(opacity < 1) c.lerp(new THREE.Color(COLOR_PAPER), 1 - opacity);
+            return c;
+        };
+
+        const INK_MAIN = cVec(0x28231e, 0.7); 
+        const INK_FAINT = cVec(0x28231e, 0.25);
+        const INK_HEAVY = cVec(0x140f0a, 0.9);
+
+        // --- Modular Geometry Builder ---
+        class GeometryBuilder {
+            constructor() {
+                this.solidV = []; this.solidC = [];
+                this.sketchV = []; this.sketchC = [];
             }
 
-            document.querySelectorAll('main section').forEach(sec => {
-                sec.classList.add('hidden');
-                sec.classList.remove('flex');
-            });
+            addSketchLine(p1, p2, color = INK_MAIN, densityMulti = 1, thickness = 1) {
+                let rng = mulberry32(hashBigInt(config.currentAddress) + p1.x + p1.y + p2.z); 
+                const passes = Math.ceil(config.density * densityMulti);
+                const r = config.roughness;
+                
+                for(let i=0; i < passes; i++) {
+                    let j1 = new THREE.Vector3((rng() - 0.5)*r, (rng() - 0.5)*r, (rng() - 0.5)*r);
+                    let j2 = new THREE.Vector3((rng() - 0.5)*r, (rng() - 0.5)*r, (rng() - 0.5)*r);
+                    
+                    let start = p1.clone().add(j1);
+                    let end = p2.clone().add(j2);
 
-            const target = document.getElementById(`view-${viewName}`);
-            target.classList.remove('hidden');
-            target.classList.add('flex');
+                    if (p1.distanceTo(p2) > 40 && r > 0) {
+                        let mid = p1.clone().lerp(p2, 0.5);
+                        mid.add(new THREE.Vector3((rng()-0.5)*r*2, (rng()-0.5)*r*2, (rng()-0.5)*r*2));
 
-            state.view = viewName;
+                        this.sketchV.push(start.x, start.y, start.z, mid.x, mid.y, mid.z);
+                        this.sketchC.push(color.r, color.g, color.b, color.r, color.g, color.b);
 
-            // If switching to reader and it's empty, or they used search, ensure it loads.
-            if (viewName === 'reader') {
-                const contentText = document.getElementById('page-content').innerText;
-                if (contentText.includes("Enter an address above")) {
-                    generatePage(state.address.v, state.address.c, state.address.p);
-                }
-            }
-        }
-
-        // ───────────────────────────────────────────────────────────
-        // HASHING & SEEDS (The Mathematics of Determinism)
-        // ───────────────────────────────────────────────────────────
-        function addressToSeed(vol, ch, pg) {
-            // Deterministic, collision-resistant bitwise hash ensuring large spread
-            const a = BigInt(vol) * 1000000007n;
-            const b = BigInt(ch) * 998244353n;
-            const c = BigInt(pg) * 999999937n;
-            const mixed = (a ^ (b << 13n) ^ (c << 7n) ^ (a >> 3n) ^ (b >> 5n)) & 0xFFFFFFFFn;
-            return Number(mixed);
-        }
-
-        function searchToAddress(query) {
-            // Hash query string to a deterministic coordinate
-            let h = 5381;
-            for (let i = 0; i < query.length; i++) {
-                h = ((h << 5) + h) ^ query.charCodeAt(i);
-                h = h >>> 0;
-            }
-            const vol = (h % 999999999) + 1;
-
-            let h2 = h;
-            for (let i = 0; i < query.length; i++) {
-                h2 = ((h2 << 3) + h2) ^ query.charCodeAt(i);
-                h2 = h2 >>> 0;
-            }
-            const ch = (h2 % 9999) + 1;
-            const pg = ((h ^ h2) % 999) + 1;
-            return { vol, ch, pg };
-        }
-
-        // ───────────────────────────────────────────────────────────
-        // DETERMINISTIC PSEUDO-LLM FALLBACK (No WebGPU)
-        // ───────────────────────────────────────────────────────────
-        class SeededRNG {
-            constructor(seed) { this.state = seed >>> 0 || 1; }
-            next() {
-                let x = this.state;
-                x ^= x << 13; x ^= x >> 17; x ^= x << 5;
-                this.state = x >>> 0;
-                return (this.state >>> 0) / 4294967295;
-            }
-            choice(arr) { return arr[Math.floor(this.next() * arr.length)]; }
-            range(min, max) { return Math.floor(this.next() * (max - min + 1)) + min; }
-        }
-
-        const SUBJECTS = ["The cartographer", "A forgotten scholar", "The archivist", "An unnamed traveler", "The last keeper", "A wandering philosopher", "The dream-reader", "An old weaver", "The blind astronomer", "A young apprentice", "The sand-painter", "A river merchant", "The stone-cutter", "An exiled poet", "The time-keeper", "The architect of dust", "A nameless monk"];
-        const VERBS = ["once wrote", "discovered", "believed", "claimed", "whispered", "observed", "recorded", "theorized", "insisted", "documented", "suspected", "calculated", "pondered", "remembered", "warned", "argued", "dreamt"];
-        const OBJECTS = ["that every map is a lie told in good faith", "that the ocean dreams in colors we cannot name", "that silence between words carries more meaning than the words themselves", "that certain stars only become visible when seen from grief", "that all roads lead inward if walked long enough", "that memory is the architecture of the self", "that libraries are the closest thing to immortality", "that light bends around love as it does around great mass", "that every mirror shows a slightly different world", "that some questions are their own answers", "that the most important books are the ones never written", "that time moves differently in places where great sorrow occurred", "that all languages secretly describe the same thing", "that music is mathematics that has learned to feel", "that forgotten names still shape the world they left behind", "that shadows possess a mass independent of light", "that the void is merely waiting for a language to express it"];
-        const CONNECTIVES = ["Furthermore,", "In the same text,", "The account continues:", "A marginal note adds:", "A separate passage states:", "The third chapter elaborates:", "An accompanying diagram explained:", "This was later disputed by those who found", "The same manuscript records that", "A curious footnote mentions that", "In a related entry,", "The reader is told that", "A correction in the margins notes that", "Scholars have since argued that", "A companion volume suggests that", "Conversely, it was believed that", "Yet, paradoxically,"];
-        const CLOSES = ["The manuscript ends without conclusion.", "No further pages survive.", "What followed was never recorded.", "The meaning, if any, remains unclear.", "The original source has since been lost.", "Further volumes are said to exist.", "The author's identity is unknown.", "Whether this is true, none can say.", "The final line is smudged beyond reading.", "The rest of the page is blank.", "History has erased the rest.", "It is left as an exercise for the infinite.", "The remainder was consumed by fire."];
-
-        function generateFallbackText(seed) {
-            const rng = new SeededRNG(seed);
-            const numParagraphs = rng.range(3, 5);
-            const paragraphs = [];
-
-            for (let p = 0; p < numParagraphs; p++) {
-                const numSentences = rng.range(4, 8);
-                const sentences = [];
-
-                for (let i = 0; i < numSentences; i++) {
-                    if (p === numParagraphs - 1 && i === numSentences - 1) {
-                        sentences.push(rng.choice(CLOSES));
-                    } else if (i === 0) {
-                        sentences.push(`${rng.choice(SUBJECTS)} ${rng.choice(VERBS)} ${rng.choice(OBJECTS)}.`);
+                        this.sketchV.push(mid.x, mid.y, mid.z, end.x, end.y, end.z);
+                        this.sketchC.push(color.r, color.g, color.b, color.r, color.g, color.b);
                     } else {
-                        const conn = rng.choice(CONNECTIVES);
-                        const subj = rng.choice(SUBJECTS).toLowerCase();
-                        const verb = rng.choice(VERBS);
-                        const obj = rng.choice(OBJECTS);
-                        sentences.push(`${conn} ${subj} ${verb} ${obj}.`);
+                        this.sketchV.push(start.x, start.y, start.z, end.x, end.y, end.z);
+                        this.sketchC.push(color.r, color.g, color.b, color.r, color.g, color.b);
+                    }
+
+                    if (thickness > 1) {
+                        let offset = new THREE.Vector3((rng()-0.5)*1.5, (rng()-0.5)*1.5, (rng()-0.5)*1.5);
+                        this.sketchV.push(start.x + offset.x, start.y + offset.y, start.z + offset.z);
+                        this.sketchV.push(end.x + offset.x, end.y + offset.y, end.z + offset.z);
+                        this.sketchC.push(color.r, color.g, color.b, color.r, color.g, color.b);
                     }
                 }
-                paragraphs.push(sentences.join(' '));
             }
-            return paragraphs.join('\n\n');
+
+            addSolidQuad(p1, p2, p3, p4, colorHex) {
+                const col = new THREE.Color(colorHex);
+                this.solidV.push(p1.x, p1.y, p1.z,  p2.x, p2.y, p2.z,  p3.x, p3.y, p3.z);
+                this.solidC.push(col.r, col.g, col.b, col.r, col.g, col.b, col.r, col.g, col.b);
+                this.solidV.push(p1.x, p1.y, p1.z,  p3.x, p3.y, p3.z,  p4.x, p4.y, p4.z);
+                this.solidC.push(col.r, col.g, col.b, col.r, col.g, col.b, col.r, col.g, col.b);
+            }
+
+            addSolidTriangle(p1, p2, p3, colorHex) {
+                const col = new THREE.Color(colorHex);
+                this.solidV.push(p1.x, p1.y, p1.z, p2.x, p2.y, p2.z, p3.x, p3.y, p3.z);
+                this.solidC.push(col.r, col.g, col.b, col.r, col.g, col.b, col.r, col.g, col.b);
+            }
+
+            build() {
+                const group = new THREE.Group();
+                if (this.solidV.length > 0) {
+                    const solidGeo = new THREE.BufferGeometry();
+                    solidGeo.setAttribute('position', new THREE.Float32BufferAttribute(this.solidV, 3));
+                    solidGeo.setAttribute('color', new THREE.Float32BufferAttribute(this.solidC, 3));
+                    solidGeo.computeVertexNormals();
+                    
+                    const solidMat = new THREE.MeshBasicMaterial({
+                        vertexColors: true, side: THREE.DoubleSide,
+                        polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1
+                    });
+                    const solidMesh = new THREE.Mesh(solidGeo, solidMat);
+                    solidMesh.frustumCulled = false;
+                    
+                    solidMesh.userData = { isBlocker: true };
+                    group.add(solidMesh);
+                    interactables.push(solidMesh);
+                }
+
+                if (this.sketchV.length > 0) {
+                    const lineGeo = new THREE.BufferGeometry();
+                    lineGeo.setAttribute('position', new THREE.Float32BufferAttribute(this.sketchV, 3));
+                    lineGeo.setAttribute('color', new THREE.Float32BufferAttribute(this.sketchC, 3));
+                    
+                    const lineMat = new THREE.LineBasicMaterial({
+                        vertexColors: true, transparent: true, opacity: 0.85
+                    });
+                    const lineMesh = new THREE.LineSegments(lineGeo, lineMat);
+                    lineMesh.frustumCulled = false;
+                    group.add(lineMesh);
+                }
+                return group;
+            }
         }
 
-        // Convert seed to a thematic topic for the LLM prompt
-        function seedToTopicHint(seed) {
-            const topics = [
-                "the nature of forgotten languages", "the geography of dreams", "the mathematics of grief",
-                "ancient methods of preserving memory", "the philosophy of empty spaces", "the taxonomy of silences",
-                "the history of colors that no longer exist", "theories of time perceived in sleep",
-                "the cartography of imaginary seas", "the biography of light through leaves",
-                "the archaeology of disappeared cities", "the ecology of mythical creatures",
-                "the ethics of memory and forgetting", "the astronomy of invisible stars",
-                "the botany of plants that only grow in darkness", "recipes known only to extinct civilizations",
-                "the music of unheard instruments", "the law and customs of impossible nations",
-                "the natural history of paradoxes", "the study of reflections that outlive their sources",
-                "theories on why certain moments feel eternal", "the migration patterns of ideas across centuries",
-                "the anatomy of words that have no translation", "the economics of traded shadows",
-                "the meteorology of emotional climates", "the theology of minor deities",
-                "methods of counting things that cannot be counted", "the diplomacy between dreams and wakefulness",
-                "the engineering of structures built entirely from sound", "the physics of coincidence",
-            ];
-            return topics[seed % topics.length];
+        // --- Math Helpers ---
+        function getHexVertices(radius, yLevel) {
+            let pts = [];
+            const angles = [90, 150, 210, 270, 330, 30]; 
+            for (let i = 0; i < 6; i++) {
+                let rad = angles[i] * Math.PI / 180;
+                pts.push(new THREE.Vector3(radius * Math.cos(rad), yLevel, radius * -Math.sin(rad))); 
+            }
+            return pts;
         }
 
-        // ───────────────────────────────────────────────────────────
-        // WEBLLM LOCAL INFERENCE
-        // ───────────────────────────────────────────────────────────
-        async function checkWebGPU() {
-            if (!navigator.gpu) return false;
-            try {
-                const adapter = await navigator.gpu.requestAdapter();
-                return !!adapter;
-            } catch { return false; }
+        function getPolygonVertices(radius, yLevel, sides, rotationOffset = 0) {
+            let pts = [];
+            let offset = (sides % 2 === 0) ? Math.PI / sides : 0; 
+            offset += rotationOffset;
+            for (let i = 0; i < sides; i++) {
+                let rad = (i * Math.PI * 2 / sides) + offset;
+                pts.push(new THREE.Vector3(radius * Math.cos(rad), yLevel, radius * -Math.sin(rad)));
+            }
+            return pts;
         }
 
-        async function initModel() {
-            if (state.modelLoading || state.modelLoaded) return;
+        function getHexXBound(z, R) {
+            let absZ = Math.abs(z);
+            let halfR = R * 0.5;
+            let width = R * Math.cos(Math.PI / 6); 
+            if (absZ <= halfR) return width;
+            if (absZ <= R) {
+                let t = (absZ - halfR) / halfR;
+                return width * (1 - t);
+            }
+            return 0;
+        }
 
-            const btnText = document.getElementById('oracle-btn-text');
-            const progressContainer = document.getElementById('oracle-progress-container');
-            const progressFill = document.getElementById('oracle-progress-fill');
-            const statusDot = document.getElementById('oracle-status-dot');
-            const wakeBtn = document.getElementById('btn-wake-oracle');
+        function getCircleXBound(z, r) {
+            if (Math.abs(z) >= r) return 0;
+            return Math.sqrt(r*r - z*z);
+        }
 
-            state.modelLoading = true;
-            statusDot.classList.replace('bg-red-900', 'bg-yellow-500');
-            statusDot.classList.replace('animate-pulse-slow', 'animate-pulse');
-            btnText.innerText = "Checking Engine...";
-            wakeBtn.classList.add('cursor-not-allowed', 'opacity-80');
+        // --- Layout Logistics ---
+        function getRoomBaseData(addrBigInt) {
+            let seed = hashBigInt(addrBigInt);
+            let rng = mulberry32(seed);
 
-            const hasWebGPU = await checkWebGPU();
+            // Minimum radius fixed to 400 to prevent claustrophobia
+            let radius = Math.floor(rng() * 350) + 400; 
+            // Minimum height fixed to 250
+            let height = Math.floor(rng() * 250) + 250; 
+            
+            let roughness = rng() * 3.0; 
+            let density = Math.floor(rng() * 4) + 1; 
 
-            if (!hasWebGPU) {
-                // Fallback Mode
-                state.modelLoaded = true;
-                state.modelLoading = false;
-                state.useWebGPU = false;
+            const centerTypes = ['OPEN', 'PILLAR_BOOKS', 'READING_PIT', 'SPIRAL_STAIRS'];
+            let centerType = centerTypes[Math.floor(rng() * centerTypes.length)];
+            const sidesOptions = [3, 4, 6, 8];
+            let centerSides = sidesOptions[Math.floor(rng() * sidesOptions.length)];
+            
+            // Adjust well radius relative to larger room
+            let wellRadius = Math.floor(rng() * 100) + 120; 
+            
+            let isFromSpiralUp = (addrBigInt % BigInt(10) === BigInt(7));
+            let isFromSpiralDown = (addrBigInt % BigInt(10) === BigInt(8));
+            if (isFromSpiralUp || isFromSpiralDown) centerType = 'SPIRAL_STAIRS';
 
-                wakeBtn.classList.add('hidden');
-                document.getElementById('oracle-fallback-state').classList.remove('hidden');
-                document.getElementById('oracle-fallback-state').classList.add('flex');
+            let spiralMode = null;
+            if (centerType === 'SPIRAL_STAIRS') {
+                if (isFromSpiralUp) spiralMode = 'down';
+                else if (isFromSpiralDown) spiralMode = 'up';
+                else spiralMode = rng() > 0.5 ? 'up' : 'down';
+            }
 
-                statusDot.classList.replace('bg-yellow-500', 'bg-yellow-600');
-                statusDot.classList.remove('animate-pulse');
+            let walls = [];
+            const passageTypes = ['HALLWAY', 'STAIRS_DOWN', 'STAIRS_UP'];
+            for(let i=0; i<6; i++) {
+                if (rng() > 0.65) walls.push(passageTypes[Math.floor(rng() * passageTypes.length)]);
+                else walls.push('BOOKS');
+            }
+            
+            if (!walls.some(w => passageTypes.includes(w))) {
+                walls[Math.floor(rng() * 6)] = passageTypes[Math.floor(rng() * passageTypes.length)];
+            }
+            return { radius, height, roughness, density, walls, centerType, centerSides, wellRadius, spiralMode };
+        }
 
-                showToast("WebGPU unavailable. Using deterministic RNG algorithm.");
+        function generateLayoutForAddress(addr) {
+            let room = getRoomBaseData(addr);
+            let isFromSpiralUp = (addr % BigInt(10) === BigInt(7));
+            let isFromSpiralDown = (addr % BigInt(10) === BigInt(8));
+
+            if (addr !== BigInt(1) && !isFromSpiralUp && !isFromSpiralDown) {
+                let parentAddr = addr / BigInt(6);
+                let entryDir = Number(addr % BigInt(6)); 
+                let myDoorToParent = (entryDir + 3) % 6; 
+                let parentRoom = getRoomBaseData(parentAddr);
+                let incomingPassage = parentRoom.walls[entryDir];
+                
+                let inverse = 'HALLWAY'; 
+                if (incomingPassage === 'STAIRS_UP') inverse = 'STAIRS_DOWN';
+                else if (incomingPassage === 'STAIRS_DOWN') inverse = 'STAIRS_UP';
+                room.walls[myDoorToParent] = inverse;
+            }
+            
+            config.radius = room.radius; config.wellRadius = room.wellRadius;
+            config.height = room.height; config.roughness = room.roughness;
+            config.density = room.density; config.layout = room.walls;
+            config.centerType = room.centerType; config.centerSides = room.centerSides;
+            config.spiralMode = room.spiralMode || 'up';
+            
+            updateUIState();
+        }
+
+        function updateUIState() {
+            document.getElementById('val-address').value = encodeAddress(config.currentAddress);
+            document.getElementById('param-radius').value = config.radius;
+            document.getElementById('val-radius').textContent = config.radius;
+            document.getElementById('param-height').value = config.height;
+            document.getElementById('val-height').textContent = config.height;
+            document.getElementById('param-roughness').value = config.roughness;
+            document.getElementById('val-roughness').textContent = config.roughness < 0.5 ? 'Drafting' : (config.roughness > 2.0 ? 'Scribble' : 'Sketch');
+            document.getElementById('param-density').value = config.density;
+            document.getElementById('val-density').textContent = config.density + 'x';
+            
+            let centerStr = config.centerType.replace('_', ' ').toLowerCase();
+            document.getElementById('val-center').textContent = config.centerType === 'OPEN' ? 'Open Atrium' : `${centerStr} (${config.centerSides}-sided)`;
+
+            const readout = document.getElementById('layout-readout');
+            readout.innerHTML = '';
+            
+            let myDoorToParent = -1;
+            let isFromSpiralUp = (config.currentAddress % BigInt(10) === BigInt(7));
+            let isFromSpiralDown = (config.currentAddress % BigInt(10) === BigInt(8));
+
+            if (config.currentAddress !== BigInt(1) && !isFromSpiralUp && !isFromSpiralDown) {
+                myDoorToParent = (Number(config.currentAddress % BigInt(6)) + 3) % 6;
+            }
+
+            config.layout.forEach((type, i) => {
+                let isReturn = (i === myDoorToParent);
+                let color = type === 'BOOKS' ? 'text-slate-800' : (isReturn ? 'text-indigo-600 font-bold' : 'text-amber-700 font-bold');
+                let formattedType = type.replace('_', ' ');
+                
+                let icon = type === 'BOOKS' ? `<svg class="inline mr-1 text-slate-400" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>` : 
+                           (isReturn ? `<svg class="inline mr-1 text-indigo-500" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 14 4 9l5-5"></path><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5v0a5.5 5.5 0 0 1-5.5 5.5H11"></path></svg>` :
+                           `<svg class="inline mr-1 text-amber-500" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h6v6"></path><path d="M10 14 21 3"></path><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path></svg>`);
+                
+                let returnLabel = isReturn ? `<span class="ml-auto text-[8px] uppercase tracking-widest text-indigo-400/80">Return</span>` : '';
+                readout.innerHTML += `<div class="truncate flex items-center border border-slate-100 bg-white px-2 py-1.5 rounded-md shadow-sm"><span class="text-slate-300 mr-2 text-[10px]">${i+1}</span> ${icon} <span class="${color}">${formattedType}</span> ${returnLabel}</div>`;
+            });
+        }
+
+        // --- Three.js Setup ---
+        const canvas = document.getElementById('three-canvas');
+        const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.setClearColor(0x000000, 0); 
+
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(45, (window.innerWidth - 320) / window.innerHeight, 1, 5000);
+        camera.position.set(0, 500, 800);
+
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.maxPolarAngle = Math.PI / 2 - 0.05; 
+        controls.minDistance = 100;
+        controls.maxDistance = 2000;
+        
+        let preZoomPos = null;
+        let preZoomTarget = null;
+        let preZoomFOV = 45;
+        let interactables = []; 
+
+        function onWindowResize() {
+            const width = window.innerWidth - 320; 
+            const height = window.innerHeight;
+            camera.aspect = width / height;
+            camera.updateProjectionMatrix();
+            renderer.setSize(width, height);
+        }
+        window.addEventListener('resize', onWindowResize);
+        onWindowResize();
+
+        // --- Architectural Generation ---
+
+        function buildBookshelfWall(p1, p2, yBase, yTop, shadeColorHex) {
+            const builder = new GeometryBuilder();
+            const dx = p2.x - p1.x; const dz = p2.z - p1.z;
+            const length = Math.sqrt(dx*dx + dz*dz);
+            const nx = dz / length; const nz = -dx / length;
+
+            const shelfDepth = 15;
+            const p1_back = new THREE.Vector3(p1.x - nx*shelfDepth, yBase, p1.z - nz*shelfDepth);
+            const p2_back = new THREE.Vector3(p2.x - nx*shelfDepth, yBase, p2.z - nz*shelfDepth);
+
+            builder.addSolidQuad(p1_back, p2_back, new THREE.Vector3(p2_back.x, yTop, p2_back.z), new THREE.Vector3(p1_back.x, yTop, p1_back.z), shadeColorHex);
+            builder.addSolidQuad(new THREE.Vector3(p1.x, yTop, p1.z), new THREE.Vector3(p2.x, yTop, p2.z), new THREE.Vector3(p2_back.x, yTop, p2_back.z), new THREE.Vector3(p1_back.x, yTop, p1_back.z), COLOR_FILL_DARK);
+
+            builder.addSketchLine(p1, p2, INK_HEAVY, 1, 2); 
+            builder.addSketchLine(new THREE.Vector3(p1.x, yTop, p1.z), new THREE.Vector3(p2.x, yTop, p2.z), INK_HEAVY, 1.5, 2);
+            builder.addSketchLine(new THREE.Vector3(p1_back.x, yTop, p1_back.z), new THREE.Vector3(p2_back.x, yTop, p2_back.z), INK_MAIN, 1);
+            builder.addSketchLine(new THREE.Vector3(p1.x, yTop, p1.z), new THREE.Vector3(p1_back.x, yTop, p1_back.z), INK_MAIN, 1);
+            builder.addSketchLine(new THREE.Vector3(p2.x, yTop, p2.z), new THREE.Vector3(p2_back.x, yTop, p2_back.z), INK_MAIN, 1);
+
+            const numShelves = 7;
+            const shelfH = (yTop - yBase) / numShelves;
+            const bookColors = [COLOR_BOOK_1, COLOR_BOOK_2, COLOR_BOOK_3, shadeColorHex];
+            let rng = mulberry32(hashBigInt(config.currentAddress) + Math.floor(p1.x));
+            let generatedBooksData = [];
+
+            for(let s = 1; s < numShelves; s++) {
+                let yS = yBase + s * shelfH;
+                let s1 = new THREE.Vector3(p1.x, yS, p1.z), s2 = new THREE.Vector3(p2.x, yS, p2.z);
+                let s1_b = new THREE.Vector3(p1_back.x, yS, p1_back.z), s2_b = new THREE.Vector3(p2_back.x, yS, p2_back.z);
+
+                builder.addSolidQuad(s1, s2, s2_b, s1_b, COLOR_FILL_MID);
+                builder.addSketchLine(s1, s2, INK_MAIN, 1, 1.5);
+
+                // Exactly 3 to 24 books per shelf
+                let numBooks = Math.floor(rng() * 22) + 3; 
+                let slotWidth = 0.96 / numBooks;
+                let currentT = 0.02;
+
+                for (let b = 0; b < numBooks; b++) {
+                    let blockW_t = slotWidth * (0.5 + rng() * 0.45); // Book takes 50% to 95% of its slot
+                    let jitter = rng() * (slotWidth - blockW_t);
+                    let t = currentT + jitter;
+
+                    if (t + blockW_t > 0.98) blockW_t = 0.98 - t;
+                    
+                    if (blockW_t > 0.005) {
+                        let bookH = shelfH * (0.6 + rng() * 0.35); 
+                        let bookD = shelfDepth * (0.7 + rng() * 0.3); 
+                        
+                        let b1x = p1.x + dx * t, b1z = p1.z + dz * t;
+                        let b2x = p1.x + dx * (t + blockW_t), b2z = p1.z + dz * (t + blockW_t);
+
+                        let bf1 = new THREE.Vector3(b1x, yS, b1z), bf2 = new THREE.Vector3(b2x, yS, b2z);
+                        let bb1 = new THREE.Vector3(b1x - nx*bookD, yS, b1z - nz*bookD), bb2 = new THREE.Vector3(b2x - nx*bookD, yS, b2z - nz*bookD);
+                        let tf1 = new THREE.Vector3(b1x, yS + bookH, b1z), tf2 = new THREE.Vector3(b2x, yS + bookH, b2z);
+                        let tb1 = new THREE.Vector3(b1x - nx*bookD, yS + bookH, b1z - nz*bookD), tb2 = new THREE.Vector3(b2x - nx*bookD, yS + bookH, b2z - nz*bookD);
+                        let bColor = bookColors[Math.floor(rng() * bookColors.length)];
+
+                        builder.addSolidQuad(bf1, bf2, tf2, tf1, bColor); builder.addSolidQuad(tf1, tf2, tb2, tb1, bColor); 
+                        builder.addSolidQuad(bb1, bf1, tf1, tb1, bColor); builder.addSolidQuad(bf2, bb2, tb2, tf2, bColor); 
+                        builder.addSketchLine(bf1, bf2, INK_MAIN, 0.8); builder.addSketchLine(tf1, tf2, INK_MAIN, 0.8); 
+                        builder.addSketchLine(bf1, tf1, INK_MAIN, 0.8); builder.addSketchLine(bf2, tf2, INK_MAIN, 0.8); 
+                        builder.addSketchLine(tf1, tb1, INK_MAIN, 0.5); builder.addSketchLine(tf2, tb2, INK_MAIN, 0.5); 
+
+                        let innerSpines = Math.floor(blockW_t * length / 5); 
+                        for(let i=1; i<innerSpines; i++) {
+                            let st = t + (blockW_t * (i/innerSpines));
+                            let sp1 = new THREE.Vector3(p1.x + dx * st, yS, p1.z + dz * st);
+                            let sp2 = new THREE.Vector3(sp1.x, yS + bookH, sp1.z);
+                            builder.addSketchLine(sp1, sp2, INK_FAINT, 0.5);
+                        }
+
+                        // Unique deterministic seed for this specific book
+                        let bookSeed = hashBigInt(config.currentAddress) + Math.floor(p1.x) * 1000 + Math.floor(p1.z) * 100 + s * 50 + b;
+                        generatedBooksData.push({ xStart: t * length, xEnd: (t + blockW_t) * length, yBase: yS, yTop: yS + bookH, seed: bookSeed });
+                    }
+                    
+                    currentT += slotWidth;
+                }
+            }
+
+            const group = builder.build();
+
+            // Push hitbox 2 units forward so it doesn't Z-fight the solid mesh wall!
+            const hitOffset = 2;
+            const h_p1 = new THREE.Vector3(p1.x + nx*hitOffset, yBase, p1.z + nz*hitOffset);
+            const h_p2 = new THREE.Vector3(p2.x + nx*hitOffset, yBase, p2.z + nz*hitOffset);
+            
+            const hitGeo = new THREE.BufferGeometry();
+            const hitVerts = new Float32Array([
+                h_p1.x, yBase, h_p1.z, h_p2.x, yBase, h_p2.z, h_p2.x, yTop, h_p2.z,
+                h_p1.x, yBase, h_p1.z, h_p2.x, yTop, h_p2.z, h_p1.x, yTop, h_p1.z
+            ]);
+            hitGeo.setAttribute('position', new THREE.BufferAttribute(hitVerts, 3));
+            const hitMesh = new THREE.Mesh(hitGeo, new THREE.MeshBasicMaterial({ visible: false, side: THREE.DoubleSide }));
+            hitMesh.userData = { isBookshelf: true, p1: p1, p2: p2, nx: nx, nz: nz, books: generatedBooksData, parentGroup: group, length: length };
+            hitMesh.frustumCulled = false; 
+            
+            group.add(hitMesh);
+            interactables.push(hitMesh);
+
+            return group;
+        }
+
+        function buildPassage(p1, p2, type, passageIndex) {
+            const builder = new GeometryBuilder();
+            let midX = (p1.x + p2.x) / 2, midZ = (p1.z + p2.z) / 2;
+            let distToCenter = Math.sqrt(midX*midX + midZ*midZ);
+            let nx = midX / distToCenter, nz = midZ / distToCenter;
+            
+            let extL = config.radius * 0.7; 
+            let p1_out = new THREE.Vector3(p1.x + nx*extL, 0, p1.z + nz*extL);
+            let p2_out = new THREE.Vector3(p2.x + nx*extL, 0, p2.z + nz*extL);
+            let yEndFloor = (type === 'STAIRS_DOWN') ? -config.depth : ((type === 'STAIRS_UP') ? config.height : 0);
+            p1_out.y = yEndFloor; p2_out.y = yEndFloor;
+
+            builder.addSketchLine(p1, p1_out, INK_MAIN, 1.5);
+            builder.addSketchLine(p2, p2_out, INK_MAIN, 1.5);
+            
+            if (type === 'HALLWAY') {
+                builder.addSolidQuad(p1, p2, p2_out, p1_out, COLOR_PAPER);
+                builder.addSketchLine(p1_out, p2_out, INK_FAINT, 1);
+            } else {
+                const steps = 25;
+                for(let i=0; i<steps; i++) {
+                    let f1 = i / steps; let f2 = (i+1) / steps;
+                    let y1 = f1 * yEndFloor; let y2 = f2 * yEndFloor;
+                    
+                    let pt1_1 = p1.clone().lerp(p1_out, f1).setY(y1);
+                    let pt2_1 = p2.clone().lerp(p2_out, f1).setY(y1);
+                    let pt1_2 = p1.clone().lerp(p1_out, f2).setY(y1);
+                    let pt2_2 = p2.clone().lerp(p2_out, f2).setY(y1);
+                    
+                    builder.addSolidQuad(pt1_1, pt2_1, pt2_2, pt1_2, COLOR_FILL_LIGHT);
+                    builder.addSketchLine(pt1_1, pt2_1, INK_MAIN, 1, 1.5);
+                    
+                    if (i < steps - 1) { 
+                        let pt1_3 = pt1_2.clone().setY(y2);
+                        let pt2_3 = pt2_2.clone().setY(y2);
+                        builder.addSolidQuad(pt1_2, pt2_2, pt2_3, pt1_3, COLOR_FILL_DARK);
+                        builder.addSketchLine(pt1_2, pt2_2, INK_HEAVY, 1);
+                    }
+                }
+            }
+
+            if (type !== 'HALLWAY') { 
+                let yAbyssTop = Math.max(config.height, yEndFloor + 100);
+                let yAbyssBot = Math.min(-config.depth, yEndFloor - 100);
+                let ab1 = new THREE.Vector3(p1_out.x, yAbyssBot, p1_out.z), ab2 = new THREE.Vector3(p2_out.x, yAbyssBot, p2_out.z);
+                let ab3 = new THREE.Vector3(p2_out.x, yAbyssTop, p2_out.z), ab4 = new THREE.Vector3(p1_out.x, yAbyssTop, p1_out.z);
+                builder.addSolidQuad(ab1, ab2, ab3, ab4, COLOR_ABYSS);
+                for(let f=0; f<=1; f+=0.04) builder.addSketchLine(ab1.clone().lerp(ab2, f), ab4.clone().lerp(ab3, f), INK_MAIN, 1.5);
+            }
+
+            builder.addSolidQuad(p1, p1_out, new THREE.Vector3(p1_out.x, config.height, p1_out.z), new THREE.Vector3(p1.x, config.height, p1.z), COLOR_FILL_LIGHT);
+            builder.addSolidQuad(p2, p2_out, new THREE.Vector3(p2_out.x, config.height, p2_out.z), new THREE.Vector3(p2.x, config.height, p2.z), COLOR_FILL_DARK);
+            builder.addSketchLine(new THREE.Vector3(p1.x, config.height, p1.z), new THREE.Vector3(p1_out.x, config.height, p1_out.z), INK_MAIN, 1);
+            builder.addSketchLine(new THREE.Vector3(p2.x, config.height, p2.z), new THREE.Vector3(p2_out.x, config.height, p2_out.z), INK_MAIN, 1);
+
+            const group = builder.build();
+
+            let nextAddr = BigInt(1);
+            let myDoorToParent = -1;
+            let isFromSpiralUp = (config.currentAddress % BigInt(10) === BigInt(7));
+            let isFromSpiralDown = (config.currentAddress % BigInt(10) === BigInt(8));
+
+            if (config.currentAddress !== BigInt(1) && !isFromSpiralUp && !isFromSpiralDown) {
+                myDoorToParent = (Number(config.currentAddress % BigInt(6)) + 3) % 6;
+            }
+
+            if (passageIndex === myDoorToParent) nextAddr = config.currentAddress / BigInt(6);
+            else nextAddr = config.currentAddress * BigInt(6) + BigInt(passageIndex);
+
+            // Shift hitbox up by 2 units so the raycaster hits it first!
+            const hitOffset = 2;
+            const hitGeo = new THREE.BufferGeometry();
+            const fVerts = new Float32Array([
+                p1.x, p1.y+hitOffset, p1.z, p2.x, p2.y+hitOffset, p2.z, p2_out.x, p2_out.y+hitOffset, p2_out.z,
+                p1.x, p1.y+hitOffset, p1.z, p2_out.x, p2_out.y+hitOffset, p2_out.z, p1_out.x, p1_out.y+hitOffset, p1_out.z
+            ]);
+            hitGeo.setAttribute('position', new THREE.BufferAttribute(fVerts, 3));
+            
+            let isReturn = (passageIndex === myDoorToParent);
+            const hitMesh = new THREE.Mesh(hitGeo, new THREE.MeshBasicMaterial({ visible: false, side: THREE.DoubleSide }));
+            hitMesh.userData = { isPassage: true, passageIndex: passageIndex, targetAddress: nextAddr, isReturn: isReturn, type: type, parentGroup: group };
+            hitMesh.frustumCulled = false;
+            
+            group.add(hitMesh);
+            interactables.push(hitMesh);
+
+            return group;
+        }
+
+        function buildPillarsAndFloor() {
+            const builder = new GeometryBuilder();
+            const R = config.radius; const rWell = config.wellRadius; const H = config.height;
+            const V_out = getHexVertices(R, 0);
+
+            if (config.centerType === 'SPIRAL_STAIRS' && config.spiralMode === 'down') {
+                const holeRadius = rWell + 8;
+                const V_in = getHexVertices(holeRadius, 0);
+                for (let i = 0; i < 6; i++) {
+                    builder.addSolidQuad(V_in[i], V_in[(i+1)%6], V_out[(i+1)%6], V_out[i], COLOR_FILL_LIGHT);
+                }
+            } else {
+                for(let i=0; i<6; i++) builder.addSolidTriangle(new THREE.Vector3(0,0,0), V_out[i], V_out[(i+1)%6], COLOR_FILL_LIGHT);
+            }
+            
+            for(let z=-R; z<=R; z+=12) {
+                let limitOut = getHexXBound(z, R);
+                let limitIn = (config.centerType !== 'OPEN') ? getCircleXBound(z, rWell + 10) : 0;
+                if (limitOut > 0) {
+                    if (limitIn > 0) {
+                        builder.addSketchLine(new THREE.Vector3(-limitOut, 0.2, z), new THREE.Vector3(-limitIn, 0.2, z), INK_FAINT, 0.5);
+                        builder.addSketchLine(new THREE.Vector3(limitIn, 0.2, z), new THREE.Vector3(limitOut, 0.2, z), INK_FAINT, 0.5);
+                    } else {
+                        builder.addSketchLine(new THREE.Vector3(-limitOut, 0.2, z), new THREE.Vector3(limitOut, 0.2, z), INK_FAINT, 0.5);
+                    }
+                }
+            }
+            for (let i = 0; i < 6; i++) {
+                builder.addSketchLine(new THREE.Vector3(0,0.2,0), V_out[i], INK_FAINT, 1.0);
+                builder.addSketchLine(V_out[i], V_out[(i+1)%6], INK_MAIN, 1);
+            }
+
+            for(let i=0; i<6; i++) {
+                const pos = V_out[i]; const r = 18; const angle = Math.atan2(pos.z, pos.x);
+                let p1 = new THREE.Vector3(pos.x + Math.cos(angle)*r, pos.y, pos.z + Math.sin(angle)*r);
+                let p2 = new THREE.Vector3(pos.x + Math.cos(angle+2.5)*r*0.7, pos.y, pos.z + Math.sin(angle+2.5)*r*0.7);
+                let p3 = new THREE.Vector3(pos.x + Math.cos(angle-2.5)*r*0.7, pos.y, pos.z + Math.sin(angle-2.5)*r*0.7);
+                let p1_t = new THREE.Vector3(p1.x, H, p1.z), p2_t = new THREE.Vector3(p2.x, H, p2.z), p3_t = new THREE.Vector3(p3.x, H, p3.z);
+
+                builder.addSolidQuad(p1, p2, p2_t, p1_t, COLOR_PILLAR); builder.addSolidQuad(p2, p3, p3_t, p2_t, COLOR_PILLAR); builder.addSolidQuad(p3, p1, p1_t, p3_t, COLOR_PILLAR);
+                builder.addSketchLine(p1, p1_t, INK_HEAVY, 1.5, 2); builder.addSketchLine(p2, p2_t, INK_HEAVY, 1.5, 2); builder.addSketchLine(p3, p3_t, INK_HEAVY, 1.5, 2);
+            }
+            return builder.build();
+        }
+
+        function buildCenterStructure() {
+            const builder = new GeometryBuilder();
+            const group = new THREE.Group();
+            const rWell = config.wellRadius; const H = config.height;
+            const wallShades = [COLOR_FILL_LIGHT, COLOR_FILL_DARK, COLOR_FILL_DARK, COLOR_FILL_MID, COLOR_FILL_MID, COLOR_FILL_LIGHT]; 
+            const V_center = getPolygonVertices(rWell, 0.1, config.centerSides);
+
+            if (config.centerType === 'READING_PIT') {
+                const depth = 50; const V_pit_bot = getPolygonVertices(rWell, -depth, config.centerSides);
+                for(let i=0; i<config.centerSides; i++) {
+                    builder.addSolidTriangle(new THREE.Vector3(0,-depth,0), V_pit_bot[i], V_pit_bot[(i+1)%config.centerSides], COLOR_FILL_MID);
+                    builder.addSolidQuad(V_center[i], V_center[(i+1)%config.centerSides], V_pit_bot[(i+1)%config.centerSides], V_pit_bot[i], COLOR_FILL_DARK);
+                    builder.addSketchLine(V_center[i], V_center[(i+1)%config.centerSides], INK_HEAVY, 1.5);
+                    builder.addSketchLine(V_pit_bot[i], V_pit_bot[(i+1)%config.centerSides], INK_MAIN, 1);
+                    builder.addSketchLine(V_center[i], V_pit_bot[i], INK_MAIN, 1);
+                }
+                group.add(builder.build());
+            } else if (config.centerType === 'PILLAR_BOOKS') {
+                for(let i=0; i<config.centerSides; i++) {
+                    let shelfGroup = buildBookshelfWall(V_center[(i+1)%config.centerSides], V_center[i], 0, H, wallShades[i%6]);
+                    group.add(shelfGroup);
+                }
+                for(let s=1; s<=3; s++) {
+                    let yLevel = s * (H/4);
+                    let V_inner = getPolygonVertices(rWell - 2, yLevel, config.centerSides);
+                    let V_outer = getPolygonVertices(rWell + 28, yLevel, config.centerSides);
+                    for(let i=0; i<config.centerSides; i++) {
+                        builder.addSolidQuad(V_inner[i], V_outer[i], V_outer[(i+1)%config.centerSides], V_inner[(i+1)%config.centerSides], COLOR_FILL_LIGHT);
+                        builder.addSketchLine(V_outer[i], V_outer[(i+1)%config.centerSides], INK_HEAVY, 1.5);
+                        builder.addSketchLine(V_outer[i], V_inner[i].clone().setY(yLevel - 30), INK_FAINT, 1);
+                    }
+                }
+                group.add(builder.build());
+            } else if (config.centerType === 'SPIRAL_STAIRS') {
+                const isDown = config.spiralMode === 'down';
+                const stairHeight = isDown ? config.depth : H;
+                const yDir = isDown ? -1 : 1;
+                for(let i=0; i<config.centerSides; i++) {
+                    let p1 = getPolygonVertices(rWell*0.3, 0, config.centerSides)[i];
+                    let p2 = getPolygonVertices(rWell*0.3, 0, config.centerSides)[(i+1)%config.centerSides];
+                    builder.addSolidQuad(p1, p2, new THREE.Vector3(p2.x, yDir * stairHeight, p2.z), new THREE.Vector3(p1.x, yDir * stairHeight, p1.z), COLOR_FILL_DARK);
+                }
+                const numSteps = 40;
+                for(let i=0; i<numSteps; i++) {
+                    let angle = (i / numSteps) * Math.PI * 4, angle2 = ((i+1) / numSteps) * Math.PI * 4;
+                    let y1 = yDir * (i / numSteps) * stairHeight, y2 = yDir * ((i+1) / numSteps) * stairHeight;
+                    
+                    let p1 = new THREE.Vector3(Math.cos(angle)*rWell, y1, -Math.sin(angle)*rWell), p2 = new THREE.Vector3(Math.cos(angle2)*rWell, y2, -Math.sin(angle2)*rWell);
+                    let pInner1 = new THREE.Vector3(Math.cos(angle)*rWell*0.3, y1, -Math.sin(angle)*rWell*0.3), pInner2 = new THREE.Vector3(Math.cos(angle2)*rWell*0.3, y2, -Math.sin(angle2)*rWell*0.3);
+
+                    builder.addSolidQuad(pInner1, p1, p2, pInner2, COLOR_FILL_LIGHT);
+                    let pRail1 = p1.clone().setY(y1 + 25), pRail2 = p2.clone().setY(y2 + 25);
+                    builder.addSolidQuad(p1, p2, pRail2, pRail1, COLOR_FILL_MID);
+                    if (i > 0) {
+                        let prevY = yDir * ((i-1) / numSteps) * stairHeight;
+                        builder.addSolidQuad(pInner1.clone().setY(prevY), p1.clone().setY(prevY), p1, pInner1, COLOR_FILL_DARK);
+                    }
+                    builder.addSketchLine(pInner1, p1, INK_MAIN, 1); builder.addSketchLine(p1, p2, INK_HEAVY, 1.5);
+                    builder.addSketchLine(pRail1, pRail2, INK_MAIN, 1.5); builder.addSketchLine(p1, pRail1, INK_FAINT, 0.5); 
+                }
+                group.add(builder.build());
+
+                let isFromUp = (config.currentAddress % BigInt(10) === BigInt(7));
+                let isFromDown = (config.currentAddress % BigInt(10) === BigInt(8));
+
+                if (config.spiralMode === 'up') {
+                    const hitUpMesh = new THREE.Mesh(new THREE.CylinderGeometry(rWell+2, rWell+2, H/2, 12), new THREE.MeshBasicMaterial({visible: false, side: THREE.DoubleSide}));
+                    hitUpMesh.position.set(0, H * 0.75, 0); hitUpMesh.frustumCulled = false;
+                    hitUpMesh.userData = { isPassage: true, type: 'SPIRAL_STAIRS_UP', targetAddress: config.currentAddress * BigInt(10) + BigInt(7), isReturn: isFromDown, parentGroup: group };
+                    group.add(hitUpMesh); interactables.push(hitUpMesh);
+                } else {
+                    const hitDownMesh = new THREE.Mesh(new THREE.CylinderGeometry(rWell+2, rWell+2, config.depth, 12), new THREE.MeshBasicMaterial({visible: false, side: THREE.DoubleSide}));
+                    hitDownMesh.position.set(0, -config.depth * 0.5, 0); hitDownMesh.frustumCulled = false;
+                    hitDownMesh.userData = { isPassage: true, type: 'SPIRAL_STAIRS_DOWN', targetAddress: isFromUp ? (config.currentAddress / BigInt(10)) : (config.currentAddress * BigInt(10) + BigInt(8)), isReturn: isFromUp, parentGroup: group };
+                    group.add(hitDownMesh); interactables.push(hitDownMesh);
+                }
+            }
+            return group;
+        }
+
+        function buildChamber() {
+            while(scene.children.length > 0){ scene.remove(scene.children[0]); }
+            meshes = []; interactables = [];
+
+            const R = config.radius;
+            const V_out = getHexVertices(R, 0);
+            const wallShades = [COLOR_FILL_LIGHT, COLOR_FILL_DARK, COLOR_FILL_DARK, COLOR_FILL_MID, COLOR_FILL_MID, COLOR_FILL_LIGHT]; 
+
+            let floorGroup = buildPillarsAndFloor();
+            floorGroup.userData.isEnvironment = true;
+            scene.add(floorGroup);
+
+            let centerGroup = buildCenterStructure();
+            centerGroup.userData.isEnvironment = true;
+            scene.add(centerGroup);
+
+            // Correctly process and add outer walls
+            config.layout.forEach((type, i) => {
+                let wallGroup;
+                if (type === 'BOOKS') {
+                    wallGroup = buildBookshelfWall(V_out[i], V_out[(i+1)%6], 0, config.height, wallShades[i]);
+                } else {
+                    wallGroup = buildPassage(V_out[i], V_out[(i+1)%6], type, i);
+                }
+                wallGroup.userData.isEnvironment = true;
+                scene.add(wallGroup); // Outer walls are now properly mounted to the scene!
+            });
+        }
+
+        // --- Interaction & Raycasting ---
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+        let hoveredObject = null;
+        let hoveredPoint = new THREE.Vector3();
+        let activeBookshelf = null;
+        let isZoomed = false;
+
+        const tooltip = document.getElementById('nav-tooltip');
+
+        function onPointerMove( event ) {
+            const sidebarW = 320;
+            if (event.clientX < sidebarW) {
+                document.body.style.cursor = 'default';
+                hoveredObject = null; tooltip.style.opacity = '0'; return;
+            }
+
+            mouse.x = ( (event.clientX - sidebarW) / (window.innerWidth - sidebarW) ) * 2 - 1;
+            mouse.y = - ( event.clientY / window.innerHeight ) * 2 + 1;
+
+            raycaster.setFromCamera( mouse, camera );
+            
+            // Raycast visible geometry to handle clicks and occlusion
+            const visibleInteractables = interactables.filter(obj => {
+                let p = obj;
+                while(p) { if(p.visible === false) return false; p = p.parent; }
+                return true;
+            });
+            
+            const intersects = raycaster.intersectObjects( visibleInteractables );
+
+            if ( intersects.length > 0 ) {
+                const hit = intersects[0].object;
+                
+                // If the raycaster hits the solid wall before the hitbox, it acts as a true blocker.
+                if (hit.userData.isBlocker) {
+                    document.body.style.cursor = 'default';
+                    hoveredObject = null; tooltip.style.opacity = '0';
+                } else if (hit.userData.isPassage || hit.userData.isBookshelf) {
+                    document.body.style.cursor = 'pointer';
+                    hoveredObject = hit;
+                    hoveredPoint.copy(intersects[0].point);
+                    
+                    tooltip.style.left = event.clientX + 'px';
+                    tooltip.style.top = event.clientY + 'px';
+
+                    if (hit.userData.isPassage) {
+                        tooltip.textContent = hit.userData.type.replace(/_/g, ' ');
+                        tooltip.style.opacity = '1';
+                    } else if (hit.userData.isBookshelf) {
+                        tooltip.textContent = (isZoomed && activeBookshelf === hit) ? 'READ BOOK' : 'ZOOM WALL';
+                        tooltip.style.opacity = '1';
+                    }
+                }
+            } else {
+                document.body.style.cursor = 'default';
+                hoveredObject = null; tooltip.style.opacity = '0';
+            }
+        }
+
+        function onPointerClick(event) {
+            if (!hoveredObject) {
+                if (isZoomed) unzoomCamera();
                 return;
             }
 
-            try {
-                progressContainer.classList.remove('hidden');
-                btnText.innerText = "Loading WebLLM...";
-
-                // Dynamically import WebLLM from esm.run
-                const { CreateMLCEngine } = await import('https://esm.run/@mlc-ai/web-llm');
-
-                // Load SmolLM2-135M-Instruct (Lightweight, coherent)
-                state.llmEngine = await CreateMLCEngine('SmolLM2-135M-Instruct-q4f16_1-MLC', {
-                    initProgressCallback: (progress) => {
-                        const pct = Math.round(progress.progress * 100);
-                        progressFill.style.width = `${pct}%`;
-                        btnText.innerText = `Downloading... ${pct}%`;
-                    }
-                });
-
-                state.modelLoaded = true;
-                state.modelLoading = false;
-                state.useWebGPU = true;
-
-                progressContainer.classList.add('hidden');
-                wakeBtn.classList.add('hidden');
-
-                document.getElementById('oracle-active-state').classList.remove('hidden');
-                document.getElementById('oracle-active-state').classList.add('flex');
-
-                statusDot.classList.replace('bg-yellow-500', 'bg-green-500');
-                statusDot.classList.remove('animate-pulse');
-
-                showToast("Oracle Awake. Intelligence is now active.");
-
-                // If currently viewing a placeholder page in reader, regenerate it immediately
-                if (state.view === 'reader' && !state.isGenerating) {
-                    generatePage(state.address.v, state.address.c, state.address.p);
-                }
-
-            } catch (err) {
-                console.error("WebLLM Error:", err);
-
-                state.modelLoaded = true;
-                state.modelLoading = false;
-                state.useWebGPU = false;
-
-                wakeBtn.classList.add('hidden');
-                progressContainer.classList.add('hidden');
-
-                document.getElementById('oracle-fallback-state').classList.remove('hidden');
-                document.getElementById('oracle-fallback-state').classList.add('flex');
-
-                statusDot.classList.replace('bg-yellow-500', 'bg-yellow-600');
-                statusDot.classList.remove('animate-pulse');
-
-                showToast("Failed to load AI engine. Using robust fallback algorithm.");
-            }
-        }
-
-        // ───────────────────────────────────────────────────────────
-        // PAGE GENERATION (UI & Logic)
-        // ───────────────────────────────────────────────────────────
-        async function generatePage(v, c, p) {
-            if (state.isGenerating) return;
-            state.isGenerating = true;
-
-            const seed = addressToSeed(v, c, p);
-
-            // Sync UI
-            document.getElementById('input-vol').value = v;
-            document.getElementById('input-ch').value = c;
-            document.getElementById('input-pg').value = p;
-            document.getElementById('display-seed').innerText = seed;
-
-            const textEl = document.getElementById('page-content');
-            const genIndicator = document.getElementById('gen-indicator');
-            const statusText = document.getElementById('gen-status-text');
-            const timeEl = document.getElementById('gen-time');
-
-            // Reset view for new content
-            textEl.innerHTML = `<div class="w-full h-64 page-text-loading"></div>`;
-            timeEl.innerText = "";
-            genIndicator.classList.remove('hidden');
-            genIndicator.classList.add('flex');
-
-            const t0 = Date.now();
-
-            try {
-                if (state.useWebGPU && state.llmEngine) {
-                    statusText.innerText = "Hallucinating via WebGPU...";
-
-                    const topicHint = seedToTopicHint(seed);
-                    const prompt = `Write a single page from an old library book. The page is from Volume ${v}, Chapter ${c}, Page ${p}. Write about: ${topicHint}. Write 3-5 paragraphs of literary prose, as if from an ancient encyclopedia, philosophical text, or literary work. Be specific and evocative. Do not include headings, titles, or pleasantries. Start writing the prose immediately.`;
-
-                    // Stream directly to DOM
-                    textEl.innerHTML = '';
-                    textEl.classList.remove('page-text-loading');
-
-                    let fullText = '';
-                    const stream = await state.llmEngine.chat.completions.create({
-                        messages: [{ role: 'user', content: prompt }],
-                        temperature: 0.001, // Deterministic
-                        max_tokens: 400,
-                        stream: true,
-                        seed: seed % 2147483647, // Safe int limit
-                    });
-
-                    for await (const chunk of stream) {
-                        const delta = chunk.choices[0]?.delta?.content || '';
-                        fullText += delta;
-                        textEl.innerText = fullText;
-                    }
-
+            if (hoveredObject.userData.isPassage) {
+                triggerTransition(hoveredObject.userData.targetAddress);
+            } else if (hoveredObject.userData.isBookshelf) {
+                if (!isZoomed || activeBookshelf !== hoveredObject) {
+                    zoomToBookshelf(hoveredObject, hoveredPoint);
                 } else {
-                    // Fast Deterministic Fallback
-                    statusText.innerText = "Translating coordinate (Fallback Algorithm)...";
-                    await new Promise(r => setTimeout(r, 600)); // Simulate work for UI effect
-                    const content = generateFallbackText(seed);
-                    textEl.innerHTML = '';
-                    textEl.innerText = content;
+                    checkBookClick(hoveredObject, hoveredPoint);
                 }
-            } catch (error) {
-                console.error("Generation Error:", error);
-                textEl.innerHTML = `<div class="text-library-accent italic">The pages here have been torn out. The architecture failed to resolve this coordinate.</div>`;
-            } finally {
-                const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
-                timeEl.innerText = `Generation: ${elapsed}s`;
-                genIndicator.classList.add('hidden');
-                genIndicator.classList.remove('flex');
-                state.isGenerating = false;
             }
         }
 
-        // ───────────────────────────────────────────────────────────
-        // NAVIGATION CONTROLS
-        // ───────────────────────────────────────────────────────────
-        function navigateToPage() {
-            let v = parseInt(document.getElementById('input-vol').value) || 1;
-            let c = parseInt(document.getElementById('input-ch').value) || 1;
-            let p = parseInt(document.getElementById('input-pg').value) || 1;
+        window.addEventListener('pointermove', onPointerMove);
+        window.addEventListener('click', onPointerClick);
 
-            v = Math.max(1, Math.min(v, 999999999));
-            c = Math.max(1, Math.min(c, 9999));
-            p = Math.max(1, Math.min(p, 999));
+        // --- Camera Animation & DOM Overlay Rendering ---
+        let originalCamPos = new THREE.Vector3();
+        let originalCamTarget = new THREE.Vector3();
+        let zoomTargetPos = new THREE.Vector3();
+        let zoomTargetLook = new THREE.Vector3();
+        let targetFOV = 45;
+        let cameraLerp = 0;
+        let isAnimatingCamera = false;
 
-            state.address = { v, c, p };
-            generatePage(v, c, p);
-        }
-
-        function changePage(delta) {
-            let p = state.address.p + delta;
-            let c = state.address.c;
-            let v = state.address.v;
-
-            if (p < 1) {
-                if (c > 1) { c--; p = 999; }
-                else if (v > 1) { v--; c = 9999; p = 999; }
-                else p = 1;
+        function zoomToBookshelf(shelfObj, hitPoint) {
+            if (!isZoomed) {
+                preZoomPos = camera.position.clone();
+                preZoomTarget = controls.target.clone();
+                preZoomFOV = camera.fov;
             }
+            isZoomed = true;
+            activeBookshelf = shelfObj;
+            originalCamPos.copy(camera.position);
+            originalCamTarget.copy(controls.target);
+            
+            const ud = shelfObj.userData;
 
-            if (p > 999) { p = 1; c++; }
-            if (c > 9999) { c = 1; v++; }
-
-            state.address = { v, c, p };
-            generatePage(v, c, p);
-        }
-
-        function randomPage() {
-            let v = Math.floor(Math.random() * 999999) + 1;
-            let c = Math.floor(Math.random() * 9999) + 1;
-            let p = Math.floor(Math.random() * 999) + 1;
-            state.address = { v, c, p };
-            generatePage(v, c, p);
-        }
-
-        // ───────────────────────────────────────────────────────────
-        // SEARCH & UTILITIES
-        // ───────────────────────────────────────────────────────────
-        function handleSearch(e) {
-            if (e.key === 'Enter') executeSearch();
-        }
-
-        function executeSearch() {
-            const query = document.getElementById('search-input').value.trim();
-            if (!query) return;
-
-            const { vol, ch, pg } = searchToAddress(query);
-            state.address = { v: vol, c: ch, p: pg };
-
-            showToast(`Query hashed to Vol ${vol}, Ch ${ch}, Pg ${pg}`);
-            switchView('reader');
-            generatePage(vol, ch, pg);
-        }
-
-        let toastTimeout;
-        function showToast(msg) {
-            const toast = document.getElementById('toast');
-            document.getElementById('toast-msg').innerText = msg;
-
-            toast.classList.remove('translate-y-20', 'opacity-0');
-
-            clearTimeout(toastTimeout);
-            toastTimeout = setTimeout(() => {
-                toast.classList.add('translate-y-20', 'opacity-0');
-            }, 3000);
-        }
-
-        function copyAddress() {
-            const seed = document.getElementById('display-seed').innerText;
-            const addr = `The Library of Babel [LLM Edition]\nVol ${state.address.v}, Ch ${state.address.c}, Pg ${state.address.p} | Seed: ${seed}`;
-
-            navigator.clipboard.writeText(addr).then(() => {
-                showToast("Coordinates copied to clipboard.");
-            }).catch(() => {
-                const textArea = document.createElement("textarea");
-                textArea.value = addr;
-                document.body.appendChild(textArea);
-                textArea.select();
-                try {
-                    document.execCommand('copy');
-                    showToast("Coordinates copied to clipboard.");
-                } catch (err) {
-                    showToast("Failed to copy coordinates.");
+            // ISOLATION ZOOM: Hides everything except the active group
+            scene.children.forEach(c => {
+                if (c.userData.isEnvironment) {
+                    let isParent = (c === ud.parentGroup || c.children.includes(ud.parentGroup));
+                    c.visible = isParent;
                 }
-                document.body.removeChild(textArea);
             });
+            ud.parentGroup.visible = true;
+            
+            let targetY = hitPoint.y;
+            if (ud.books) {
+                for (let book of ud.books) {
+                    if (hitPoint.y >= book.yBase && hitPoint.y <= book.yTop) {
+                        targetY = (book.yBase + book.yTop) / 2; break;
+                    }
+                }
+            }
+
+            const midPoint = ud.p1.clone().lerp(ud.p2, 0.5);
+            midPoint.y = targetY; 
+            zoomTargetLook.copy(midPoint);
+            
+            targetFOV = 75; 
+            const fovRad = THREE.MathUtils.degToRad(targetFOV);
+            const aspect = camera.aspect;
+            const wallHeight = config.height;
+            const wallWidth = ud.length;
+            
+            const distV = (wallHeight / 2) / Math.tan(fovRad / 2);
+            const distH = (wallWidth / 2) / (Math.tan(fovRad / 2) * aspect);
+            let distFromWall = Math.max(distV, distH) * 1.15; 
+
+            zoomTargetPos.copy(midPoint).add(new THREE.Vector3(ud.nx * distFromWall, 0, ud.nz * distFromWall));
+            cameraLerp = 0; isAnimatingCamera = true;
+            
+            // Generate DOM Labels
+            const labelsContainer = document.getElementById('book-labels');
+            labelsContainer.innerHTML = '';
+            
+            const dx = ud.p2.x - ud.p1.x;
+            const dz = ud.p2.z - ud.p1.z;
+            
+            ud.books.forEach(book => {
+                let rng = mulberry32(book.seed);
+                let title = generateBookTitle(rng);
+                
+                let bWidth = book.xEnd - book.xStart;
+                if (bWidth < 2.5) return; // Skip tiny gaps to avoid overlap
+                
+                let t = (book.xStart + book.xEnd) / 2 / ud.length;
+                let gx = ud.p1.x + dx * t;
+                let gz = ud.p1.z + dz * t;
+                let gy = (book.yBase + book.yTop) / 2;
+                
+                // Offset slightly in front of the book spine
+                let px = gx + ud.nx * 0.5;
+                let pz = gz + ud.nz * 0.5;
+                
+                let span = document.createElement('div');
+                span.className = 'absolute top-0 left-0 text-[10px] text-slate-800/80 font-mono tracking-tight whitespace-nowrap opacity-0 transition-opacity duration-500 mix-blend-multiply font-bold select-none text-center';
+                
+                // Since it will be rotated 90deg, max-width governs its vertical clipping
+                let maxW = book.yTop - book.yBase - 8; 
+                span.style.maxWidth = maxW + 'px';
+                span.style.overflow = 'hidden';
+                span.style.textOverflow = 'ellipsis';
+                
+                span.innerText = title;
+                span.dataset.x = px;
+                span.dataset.y = gy;
+                span.dataset.z = pz;
+                
+                labelsContainer.appendChild(span);
+            });
+
+            // Fade in labels after camera settles
+            setTimeout(() => {
+                if (isZoomed && activeBookshelf === shelfObj) {
+                    Array.from(labelsContainer.children).forEach(el => el.classList.remove('opacity-0'));
+                }
+            }, 800);
         }
 
-        // Global Keyboard Navigation
-        document.addEventListener('keydown', (e) => {
-            if (e.target.tagName === 'INPUT') return;
-            if (state.view !== 'reader') return;
+        function unzoomCamera() {
+            isZoomed = false; activeBookshelf = null;
+            originalCamPos.copy(camera.position);
+            originalCamTarget.copy(controls.target);
+            
+            scene.children.forEach(c => {
+                if (c.userData.isEnvironment) c.visible = true;
+            });
+            
+            const labelsContainer = document.getElementById('book-labels');
+            Array.from(labelsContainer.children).forEach(el => el.classList.add('opacity-0'));
+            setTimeout(() => {
+                if (!isZoomed) labelsContainer.innerHTML = '';
+            }, 700);
 
-            if (e.key === 'ArrowRight') changePage(1);
-            if (e.key === 'ArrowLeft') changePage(-1);
+            if (preZoomPos) {
+                zoomTargetPos.copy(preZoomPos); zoomTargetLook.copy(preZoomTarget);
+            } else {
+                zoomTargetPos.set(0, 500, 800); zoomTargetLook.set(0,0,0);
+            }
+            targetFOV = 45; cameraLerp = 0; isAnimatingCamera = true;
+        }
+
+        function checkBookClick(shelfObj, hitPoint) {
+            const ud = shelfObj.userData;
+            // Accounting for the 2 unit physical hitbox push forward so math lines up perfectly!
+            const dx = hitPoint.x - (ud.p1.x + ud.nx*2);
+            const dz = hitPoint.z - (ud.p1.z + ud.nz*2);
+            const localX = Math.sqrt(dx*dx + dz*dz);
+            const localY = hitPoint.y; 
+
+            for (let book of ud.books) {
+                if (localX >= book.xStart && localX <= book.xEnd && localY >= book.yBase && localY <= book.yTop) {
+                    let rng = mulberry32(book.seed);
+                    alert("📖 BOOK TITLE:\n\n" + generateBookTitle(rng));
+                    return;
+                }
+            }
+            unzoomCamera(); 
+        }
+
+        function triggerTransition(newAddressBigInt) {
+            const overlay = document.getElementById('transition-overlay');
+            overlay.style.opacity = '1';
+            
+            isZoomed = false; activeBookshelf = null; isAnimatingCamera = false;
+            controls.enabled = true; tooltip.style.opacity = '0';
+            preZoomPos = null; preZoomTarget = null; targetFOV = 45;
+            document.getElementById('book-labels').innerHTML = '';
+            
+            setTimeout(() => {
+                config.currentAddress = newAddressBigInt;
+                generateLayoutForAddress(config.currentAddress);
+                buildChamber();
+                
+                const angles = [0, Math.PI/3, 2*Math.PI/3, Math.PI, 4*Math.PI/3, 5*Math.PI/3];
+                const startAngle = angles[Math.floor(Math.random()*angles.length)];
+                camera.position.set(Math.cos(startAngle)*800, 500, Math.sin(startAngle)*800);
+                controls.target.set(0,0,0);
+                camera.fov = 45; camera.updateProjectionMatrix(); controls.update();
+
+                overlay.style.opacity = '0';
+            }, 300);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            if (isAnimatingCamera) {
+                controls.enabled = false;
+                cameraLerp += 0.04;
+                if (cameraLerp >= 1) {
+                    cameraLerp = 1; isAnimatingCamera = false; controls.enabled = true;
+                }
+                const t = cameraLerp * cameraLerp * (3 - 2 * cameraLerp);
+                camera.position.lerpVectors(originalCamPos, zoomTargetPos, t);
+                controls.target.lerpVectors(originalCamTarget, zoomTargetLook, t);
+            }
+            
+            if (Math.abs(camera.fov - targetFOV) > 0.1) {
+                camera.fov = THREE.MathUtils.lerp(camera.fov, targetFOV, 0.06);
+                camera.updateProjectionMatrix();
+            }
+            
+            // Synchronize DOM Labels 2D positions based on 3D projections
+            const labelsContainer = document.getElementById('book-labels');
+            if (labelsContainer.children.length > 0) {
+                const hw = canvas.clientWidth / 2;
+                const hh = canvas.clientHeight / 2;
+                let vec = new THREE.Vector3();
+                
+                Array.from(labelsContainer.children).forEach(el => {
+                    vec.set(parseFloat(el.dataset.x), parseFloat(el.dataset.y), parseFloat(el.dataset.z));
+                    vec.project(camera);
+                    
+                    if (vec.z > 1 || vec.z < -1) {
+                        el.style.display = 'none';
+                        return;
+                    }
+                    el.style.display = 'block';
+                    
+                    let x = (vec.x * hw) + hw;
+                    let y = -(vec.y * hh) + hh;
+                    
+                    // Hardware accelerated 3D translation with 90 degree tilt
+                    el.style.transform = `translate3d(${x}px, ${y}px, 0) translate(-50%, -50%) rotate(90deg)`;
+                });
+            }
+            
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        // --- UI Setup ---
+        document.getElementById('btn-generate').addEventListener('click', () => {
+            const maxSafe = BigInt(Number.MAX_SAFE_INTEGER);
+            const randBigInt = BigInt(Math.floor(Math.random() * 10000)) * maxSafe + BigInt(Math.floor(Math.random() * Number.MAX_SAFE_INTEGER));
+            triggerTransition(randBigInt);
         });
+
+        document.getElementById('val-address').addEventListener('change', (e) => {
+            const newAddr = decodeAddress(e.target.value.trim());
+            triggerTransition(newAddr);
+        });
+
+        generateLayoutForAddress(config.currentAddress);
+        buildChamber();
+        animate();
 
     </script>
 </body>
-
 </html>
