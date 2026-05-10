@@ -4,7 +4,7 @@
 lucide.createIcons();
 
 const state = {
-  view: 'home',
+  view: window.location.hash.slice(1).split('/')[0] || 'home',
   modelLoaded: false,
   modelLoading: false,
   useWebGPU: false,
@@ -15,18 +15,22 @@ const state = {
   engineType: localStorage.getItem('babel_engine_type') || 'local',
   localModel: localStorage.getItem('babel_local_model') || 'SmolLM2-135M-Instruct-q0f16-MLC',
   apiSettings: JSON.parse(localStorage.getItem('babel_api_settings') || '{"url": "", "model": "", "key": ""}'),
-  address: { chamber: '', vol: 1, totalPages: 410, currentPage: 1 },
+  address: { chamber: '', shelf: 1, book: 1, vol: 1, pg: 1, totalPages: 410 },
 };
 
 // Global functions for Oracle Modal
 window.openOracleModal = function() {
   const modal = document.getElementById('oracle-modal');
   if (modal) modal.classList.remove('hidden');
+  // Disable OrbitControls while modal is open
+  if (window.__orbitControls) window.__orbitControls.enabled = false;
 };
 
 window.closeOracleModal = function() {
   const modal = document.getElementById('oracle-modal');
   if (modal) modal.classList.add('hidden');
+  // Re-enable OrbitControls when modal closes
+  if (window.__orbitControls) window.__orbitControls.enabled = true;
 };
 
 const CONSENT_KEY = 'babel_model_consent';
@@ -73,6 +77,8 @@ function decodeChamber(str) {
   }
   return num === 0n ? 1n : num;
 }
+window.encodeAddress = encodeChamber;
+window.decodeAddress = decodeChamber;
 
 function stringToBigInt(str) {
   const encoder = new TextEncoder();
@@ -133,22 +139,42 @@ function switchView(viewName) {
     }
   }
 
-  // Update URL hash without pushing a new state if it's already there
-  let newHash = viewName;
-  if (viewName === 'reader' && state.address.chamber) {
-    newHash = `reader/${encodeURIComponent(state.address.chamber)}`;
-  }
-
-  if (window.location.hash.slice(1) !== newHash) {
-    history.replaceState(null, null, `#${newHash}`);
-  }
+  // Update URL hash
+  syncURL();
 
   // Auto-load the reader on first visit
   if (viewName === 'reader') {
     const contentText = document.getElementById('page-content').innerText;
-    if (contentText.includes('Enter an address above')) {
+    if (contentText.includes('Enter an address above') || !contentText.trim()) {
       generatePage(state.address.chamber || CHAMBER_CHARSET[0]);
     }
+  }
+}
+
+/**
+ * Synchronizes the URL hash with the current application state.
+ */
+function syncURL() {
+  let newHash = state.view;
+  if (state.view === 'reader') {
+    const chamber = document.getElementById('chamber-input')?.value || state.address.chamber;
+    if (chamber) {
+      const shelf = document.getElementById('input-shelf')?.value || state.address.shelf || '1';
+      const book = document.getElementById('input-book')?.value || state.address.book || '1';
+      const vol = document.getElementById('input-vol')?.value || state.address.vol || '1';
+      const pg = document.getElementById('input-pg')?.value || state.address.pg || '1';
+      
+      const isReaderPanelOpen = !document.getElementById('reader-panel').classList.contains('hidden');
+      if (isReaderPanelOpen) {
+        newHash = `reader/${encodeURIComponent(chamber)}/${shelf}/${book}/${vol}/${pg}`;
+      } else {
+        newHash = `reader/${encodeURIComponent(chamber)}`;
+      }
+    }
+  }
+
+  if (window.location.hash.slice(1) !== newHash) {
+    history.replaceState(null, null, `#${newHash}`);
   }
 }
 
@@ -544,16 +570,16 @@ async function generatePage(chamber, vol = 1, enforceQuery = true, overridePage 
   state.currentAbortController = controller;
   state.isGenerating = true;
 
+  // Read current inputs for the full address
+  const shelf = parseInt(document.getElementById('input-shelf')?.value) || 1;
+  const book = parseInt(document.getElementById('input-book')?.value) || 1;
+  const pg = overridePage || parseInt(document.getElementById('input-pg')?.value) || 1;
+
   // Update state address
-  state.address = { ...state.address, chamber, vol };
+  state.address = { ...state.address, chamber, shelf, book, vol, pg };
 
   // Update URL
-  if (state.view === 'reader') {
-    const newHash = `reader/${encodeURIComponent(chamber)}`;
-    if (window.location.hash.slice(1) !== newHash) {
-      history.pushState(null, null, `#${newHash}`);
-    }
-  }
+  syncURL();
 
   // Oracle not ready
   if (state.engineType === 'local' && (!state.modelLoaded || !state.useWebGPU)) {
@@ -629,8 +655,8 @@ async function generatePage(chamber, vol = 1, enforceQuery = true, overridePage 
     const hasQuery = enforceQuery && isSearchChamber;
 
     statusText.innerText = 'Extracting metadata...';
-    // Document metadata is per-chamber (shared across volumes)
-    const bookSeed = hashStr(chamber);
+    // Document metadata is seeded from Chamber + Shelf + Book
+    const bookSeed = hashStr(`${chamber}-${shelf}-${book}`);
     let meta = { title: "Unknown Document", language: "English", documentType: "document", about: "A forgotten and obscure text." };
     try {
       let call1User = `Given this archive category: ${categoryPath}, and this unique identifier: ${bookSeed}, imagine any written document that could possibly exist or never exist in any universe, reality, or fiction that relates even loosely to this category. It can be anything written \u2014 a refrigerator repair log from 1823, a demon's grocery list, a tax record from ancient Babylon, a love letter written by a machine, a fake legal contract between two gods, a recipe for a dish that cannot physically exist, a ship manifest from a voyage to a fictional planet, a child's homework from the year 3000, a ledger of imaginary debts, a sermon for a religion that never existed, a field guide to extinct imaginary creatures, a maintenance manual for a time machine, a court transcript from a trial that never happened \u2014 absolutely anything. The only rule is that it must be a written document of some kind and it must relate to the category in any way however loose or absurd. Respond with exactly this JSON structure: {"title": "", "language": "", "documentType": "", "about": ""}. The language field must be a natural language name and should not default to English. The documentType must be specific and creative. The about field must be 2 to 3 sentences. Be wildly specific and creative. Never default to novels. Never default to English. Never be generic.`;
@@ -698,11 +724,14 @@ async function generatePage(chamber, vol = 1, enforceQuery = true, overridePage 
     state.address.totalPages = totalPages;
     // Clamp pageNum to actual total
     const clampedPage = Math.min(pageNum, totalPages);
-    state.address.currentPage = clampedPage;
+    state.address.pg = clampedPage;
     document.getElementById('input-pg').value = clampedPage;
     document.getElementById('input-pg').max = totalPages;
     const maxPgEl = document.getElementById('display-max-pg');
     if (maxPgEl) maxPgEl.innerText = totalPages;
+
+    // Update URL once the page number is determined
+    syncURL();
 
 
     statusText.innerText = state.engineType === 'api' ? 'Consulting Remote API Oracle…' : `Hallucinating via ${state.localModel}…`;
@@ -745,19 +774,76 @@ async function generatePage(chamber, vol = 1, enforceQuery = true, overridePage 
 function navigateToPage() {
   let chamberEl = document.getElementById('chamber-input');
   let chamber = (chamberEl ? chamberEl.value.trim() : '') || CHAMBER_CHARSET[0];
+  const shelf = parseInt(document.getElementById('input-shelf').value) || 1;
+  const book = parseInt(document.getElementById('input-book').value) || 1;
   const vol = parseInt(document.getElementById('input-vol').value) || 1;
-  state.address = { chamber, vol, totalPages: state.address.totalPages || 410 };
+  const pg = parseInt(document.getElementById('input-pg').value) || 1;
+  
+  state.address = { chamber, shelf, book, vol, pg, totalPages: state.address.totalPages || 410 };
   generatePage(chamber, vol, false);
 }
+
+/**
+ * Generates a completely random address across all coordinates and navigates to it.
+ */
+window.navigateToRandomPage = function() {
+  console.log("navigateToRandomPage called");
+  const panel = document.getElementById('reader-panel');
+  const isReaderOpen = panel && !panel.classList.contains('hidden');
+  console.log("isReaderOpen:", isReaderOpen);
+
+  // Random Chamber
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  let num = 0n;
+  for (let b of bytes) num = (num << 8n) | BigInt(b);
+  if (num === 0n) num = 1n;
+  const chamber = encodeChamber(num);
+  console.log("New random chamber address:", chamber);
+  
+  if (isReaderOpen) {
+    console.log("Randomizing full address");
+    const shelf = Math.floor(Math.random() * 4) + 1;
+    const book = Math.floor(Math.random() * 20) + 1;
+    const vol = Math.floor(Math.random() * 8) + 1;
+    const pg = Math.floor(Math.random() * 410) + 1;
+    
+    const chamberEl = document.getElementById('chamber-input');
+    if (chamberEl) chamberEl.value = chamber;
+    document.getElementById('input-shelf').value = shelf;
+    document.getElementById('input-book').value = book;
+    document.getElementById('input-vol').value = vol;
+    document.getElementById('input-pg').value = pg;
+
+    navigateToPage();
+  } else {
+    console.log("Randomizing chamber only");
+    const chamberEl = document.getElementById('chamber-input');
+    if (chamberEl) {
+      chamberEl.value = chamber;
+      state.address.chamber = chamber;
+      
+      if (window.setChamberFromInput) {
+        console.log("Calling setChamberFromInput");
+        window.setChamberFromInput();
+      } else {
+        console.log("setChamberFromInput not found, falling back to syncURL");
+        syncURL();
+      }
+    }
+  }
+};
 
 function changePage(delta) {
   const chamber = state.address.chamber;
   const vol = state.address.vol || 1;
   const totalPages = state.address.totalPages || 410;
-  const currentPage = state.address.currentPage || parseInt(document.getElementById('input-pg').value) || 1;
+  const currentPage = state.address.pg || parseInt(document.getElementById('input-pg').value) || 1;
   const nextPage = Math.min(Math.max(1, currentPage + delta), totalPages);
   if (nextPage === currentPage) return; // already at boundary
-  state.address.currentPage = nextPage;
+  
+  document.getElementById('input-pg').value = nextPage;
+  state.address.pg = nextPage;
   generatePage(chamber, vol, false, nextPage);
 }
 
@@ -795,6 +881,12 @@ function executeSearch() {
 
   showToast(`Query securely hashed into the infinite index.`);
   switchView('reader');
+
+  // Open the reader panel directly so the user lands on the page, not the 3D chamber
+  const panel = document.getElementById('reader-panel');
+  if (panel) panel.classList.remove('hidden');
+  if (window.__orbitControls) window.__orbitControls.enabled = false;
+
   generatePage(chamber, 1, true); // enforceQuery = true
 }
 
@@ -802,19 +894,18 @@ function executeSearch() {
 // UTILITIES
 // ───────────────────────────────────────────────────────────
 function copyAddress() {
-  const seed = document.getElementById('display-seed').innerText;
-  const addr = `The Library of Babel [LLM Edition]\nChamber ${state.address.chamber} | Seed: ${seed}`;
+  const addr = window.location.href;
 
   navigator.clipboard.writeText(addr)
-    .then(() => showToast('Coordinates copied to clipboard.'))
+    .then(() => showToast('Link copied to clipboard.'))
     .catch(() => {
       // Fallback for file:// context
       const ta = document.createElement('textarea');
       ta.value = addr;
       document.body.appendChild(ta);
       ta.select();
-      try { document.execCommand('copy'); showToast('Coordinates copied to clipboard.'); }
-      catch { showToast('Failed to copy coordinates.'); }
+      try { document.execCommand('copy'); showToast('Link copied to clipboard.'); }
+      catch { showToast('Failed to copy link.'); }
       document.body.removeChild(ta);
     });
 }
@@ -891,13 +982,17 @@ function hideConsentModal() {
  * accepted = false → save preference, enable fallback mode immediately
  */
 function handleConsent(accepted) {
-  localStorage.setItem(CONSENT_KEY, accepted ? 'accepted' : 'declined');
-  hideConsentModal();
-
   if (accepted) {
-    initModel();
+    // User wants AI — remember this permanently
+    localStorage.setItem(CONSENT_KEY, 'accepted');
+    hideConsentModal();
+    // Open oracle config so they can pick their model
+    openOracleModal();
+  } else {
+    // User skipped for now — do NOT save to localStorage so the modal shows again next visit
+    hideConsentModal();
+    // Oracle stays asleep, they browse freely
   }
-  // Declined: just let them browse freely. Oracle stays asleep.
 }
 
 /**
@@ -945,20 +1040,37 @@ function checkConsent() {
     if (state.engineType === 'local') {
       setTimeout(initModel, 400);
     }
-  } else if (!consent && state.engineType === 'local') {
-    // First visit — show consent modal after brief paint delay
-    setTimeout(showConsentModal, 300);
+  } else {
+    // No accepted consent — show the welcome modal on each visit
+    setTimeout(showConsentModal, 400);
   }
 
-  // Load correct view from hash or default
+  // Load correct view from hash, or default to 'home'
   const hash = window.location.hash.slice(1);
   const parts = hash.split('/');
   const viewPart = parts[0];
 
-  if (['home', 'reader', 'search', 'about', 'settings'].includes(viewPart)) {
-    if (viewPart === 'reader' && parts.length === 2) {
+  if (['home', 'reader', 'search', 'about'].includes(viewPart)) {
+    if (viewPart === 'reader' && parts.length >= 2) {
       const chamber = decodeURIComponent(parts[1]);
-      state.address = { chamber };
+      const shelf = parts[2] || '1';
+      const book = parts[3] || '1';
+      const vol = parts[4] || '1';
+      const pg = parts[5] || '1';
+
+      state.address = { ...state.address, chamber, shelf, book, vol, pg };
+      
+      if (parts[2]) document.getElementById('input-shelf').value = parts[2];
+      if (parts[3]) document.getElementById('input-book').value = parts[3];
+      if (parts[4]) document.getElementById('input-vol').value = parts[4];
+      if (parts[5]) document.getElementById('input-pg').value = parts[5];
+
+      if (parts.length > 2) {
+        // Full address: open the reader panel
+        const panel = document.getElementById('reader-panel');
+        if (panel) panel.classList.remove('hidden');
+        if (window.__orbitControls) window.__orbitControls.enabled = false;
+      }
     }
     switchView(viewPart);
   } else {
@@ -972,11 +1084,35 @@ window.addEventListener('hashchange', () => {
   const parts = hash.split('/');
   const viewPart = parts[0];
 
-  if (['home', 'reader', 'search', 'about', 'settings'].includes(viewPart)) {
-    if (viewPart === 'reader' && parts.length === 2) {
+  if (['home', 'reader', 'search', 'about'].includes(viewPart)) {
+    if (viewPart === 'reader' && parts.length >= 2) {
       const chamber = decodeURIComponent(parts[1]);
-      if (state.address.chamber !== chamber) {
-        generatePage(chamber);
+      const shelf = parts[2] || '1';
+      const book = parts[3] || '1';
+      const vol = parts[4] || '1';
+      const pg = parts[5] || '1';
+      
+      // Update inputs from URL
+      if (parts[2]) document.getElementById('input-shelf').value = parts[2];
+      if (parts[3]) document.getElementById('input-book').value = parts[3];
+      if (parts[4]) document.getElementById('input-vol').value = parts[4];
+      if (parts[5]) document.getElementById('input-pg').value = parts[5];
+
+      if (parts.length > 2) {
+        const panel = document.getElementById('reader-panel');
+        if (panel) panel.classList.remove('hidden');
+        if (window.__orbitControls) window.__orbitControls.enabled = false;
+      }
+
+      // Only generate if something actually changed
+      const hasChanged = state.address.chamber !== chamber ||
+                        state.address.shelf != shelf ||
+                        state.address.book != book ||
+                        state.address.vol != vol ||
+                        state.address.pg != pg;
+
+      if (hasChanged) {
+        generatePage(chamber, parseInt(vol), false, parseInt(pg));
       }
     } else {
       switchView(viewPart);

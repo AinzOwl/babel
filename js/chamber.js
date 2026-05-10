@@ -2,14 +2,12 @@
   const canvas = document.getElementById("three-canvas");
   if (!canvas) return;
 
-  let charset = "";
-  for (let i = 33; i <= 126; i++) charset += String.fromCharCode(i);
-  for (let i = 161; i <= 255; i++) charset += String.fromCharCode(i);
-  for (let i = 0x0400; i <= 0x04FF; i++) charset += String.fromCharCode(i);
-  for (let i = 0x3041; i <= 0x30FF; i++) charset += String.fromCharCode(i);
-  for (let i = 0x4E00; i <= 0x6000; i++) charset += String.fromCharCode(i);
-
-  const BASE = BigInt(charset.length);
+  // Use global encoding if available
+  const encodeAddress = (n) => window.encodeAddress ? window.encodeAddress(n) : n.toString();
+  const decodeAddress = (s) => window.decodeAddress ? window.decodeAddress(s) : BigInt(1);
+  
+  // Use a fallback charset for titles if not initialized
+  const titleCharset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
   
   function generateBookTitle(rng) {
     let title = "";
@@ -19,33 +17,14 @@
       const wordLen = Math.floor(rng() * 6) + 3;
       let word = "";
       for (let j = 0; j < wordLen; j++) {
-        word += charset[Math.floor(rng() * charset.length)];
+        word += titleCharset[Math.floor(rng() * titleCharset.length)];
       }
       title += word + " ";
     }
     return title.trim() + "...";
   }
 
-  function encodeAddress(numBigInt) {
-    if (numBigInt === BigInt(0)) return charset[0];
-    let str = "";
-    let temp = numBigInt;
-    while (temp > BigInt(0)) {
-      str = charset[Number(temp % BASE)] + str;
-      temp = temp / BASE;
-    }
-    return str;
-  }
 
-  function decodeAddress(str) {
-    let num = BigInt(0);
-    for (let i = 0; i < str.length; i++) {
-      let idx = charset.indexOf(str[i]);
-      if (idx === -1) return BigInt(1);
-      num = num * BASE + BigInt(idx);
-    }
-    return num === BigInt(0) ? BigInt(1) : num;
-  }
 
   function hashBigInt(n) {
     let hash = 0x811c9dc5;
@@ -328,6 +307,7 @@
   camera.position.set(1200, 820, 1200);
 
   const controls = new THREE.OrbitControls(camera, renderer.domElement);
+  window.__orbitControls = controls; // expose for modal input gating
   controls.enableDamping = true;
   controls.dampingFactor = 0.05;
   controls.maxPolarAngle = Math.PI / 2 - 0.05;
@@ -767,7 +747,20 @@
 
   const tooltip = document.getElementById("nav-tooltip");
 
+  // Guard: ignore all 3D input while any modal is open
+  function isModalOpen() {
+    return !!document.querySelector(
+      '#oracle-modal:not(.hidden), #consent-modal:not(.hidden), #reader-panel:not(.hidden), #error-modal:not(.hidden)'
+    );
+  }
+
   function onPointerMove(event) {
+    if (isModalOpen()) {
+      document.body.style.cursor = 'default';
+      hoveredObject = null;
+      if (tooltip) tooltip.style.opacity = '0';
+      return;
+    }
     const sidebarW = 256;
     if (event.clientX < sidebarW) {
       document.body.style.cursor = "default";
@@ -824,10 +817,12 @@
 
   let pointerDownPos = { x: 0, y: 0 };
   window.addEventListener("pointerdown", (e) => {
+    if (isModalOpen()) return;
     pointerDownPos = { x: e.clientX, y: e.clientY };
   });
 
   function onPointerClick(event) {
+    if (isModalOpen()) return;
     const dist = Math.abs(event.clientX - pointerDownPos.x) + Math.abs(event.clientY - pointerDownPos.y);
     if (dist > 5) return; // Ignore drag
 
@@ -1004,10 +999,11 @@
         const pgInput = document.getElementById('input-pg');
         if (pgInput) pgInput.value = 1;
         
-        const bookChamber = encodeAddress(BigInt(book.seed));
+        const chamber = encodeAddress(config.currentAddress);
         const panel = document.getElementById('reader-panel');
         if (panel) panel.classList.remove('hidden');
-        openChamberPage(bookChamber);
+        if (window.__orbitControls) window.__orbitControls.enabled = false;
+        if (window.generatePage) window.generatePage(chamber, 1, false);
         return;
       }
     }
@@ -1108,16 +1104,10 @@
   }
 
   function updateHash() {
-    const chamber = encodeAddress(config.currentAddress);
-    if (window.location.hash !== `#reader/${encodeURIComponent(chamber)}`) {
-      history.replaceState(null, null, `#reader/${encodeURIComponent(chamber)}`);
-    }
+    if (window.syncURL) window.syncURL();
   }
 
-  function openChamberPage(chamber) {
-    const target = `index.html#reader/${encodeURIComponent(chamber)}`;
-    window.location.href = target;
-  }
+
 
   function randomChamber() {
     const bytes = new Uint8Array(16);
@@ -1141,8 +1131,11 @@
   }
 
   function copyChamberLink() {
-    const chamber = encodeAddress(config.currentAddress);
-    const link = `${window.location.origin}${window.location.pathname}#reader/${encodeURIComponent(chamber)}`;
+    if (window.copyAddress) {
+      window.copyAddress();
+      return;
+    }
+    const link = window.location.href;
     navigator.clipboard.writeText(link).catch(() => {
       const ta = document.createElement("textarea");
       ta.value = link;
@@ -1158,6 +1151,28 @@
     const parts = hash.split("/");
     if (parts[0] === "reader" && parts[1]) {
       setChamber(decodeAddress(decodeURIComponent(parts[1])));
+      
+      // Deep link to shelf/book
+      if (parts[2]) {
+        const shelfNum = parseInt(parts[2]);
+        if (!isNaN(shelfNum)) {
+          // Wait a frame for interactables to be populated
+          setTimeout(() => {
+            const shelfInput = document.getElementById('input-shelf');
+            if (shelfInput) shelfInput.value = shelfNum;
+            if (window.navigateToShelf) window.navigateToShelf();
+            
+            if (parts[3]) {
+              const bookNum = parseInt(parts[3]);
+              const bookInput = document.getElementById('input-book');
+              if (bookInput && !isNaN(bookNum)) {
+                bookInput.value = bookNum;
+                // Just update input; app.js handles the reader panel/generation
+              }
+            }
+          }, 50);
+        }
+      }
       return true;
     }
     return false;
@@ -1168,14 +1183,28 @@
     const copyBtn = document.getElementById("btn-chamber-copy");
     const input = document.getElementById("chamber-input");
 
-    if (randomBtn) randomBtn.addEventListener("click", () => setChamber(randomChamber()));
+    if (randomBtn) randomBtn.addEventListener("click", () => {
+      console.log("Random button clicked in chamber.js");
+      if (window.navigateToRandomPage) {
+        console.log("Found window.navigateToRandomPage, calling it");
+        window.navigateToRandomPage();
+      } else {
+        console.log("window.navigateToRandomPage not found, falling back to setChamber");
+        setChamber(randomChamber());
+      }
+    });
     if (copyBtn) copyBtn.addEventListener("click", copyChamberLink);
     if (input) input.addEventListener("keydown", (event) => {
       if (event.key === "Enter") setChamberFromInput();
     });
   }
 
+  let isInitialized = false;
+
   function initChamber() {
+    if (isInitialized) return;
+    isInitialized = true;
+    
     if (!initFromHash()) {
       setChamber(randomChamber());
     }
@@ -1195,7 +1224,11 @@
   }
 
   wrapSwitchView();
-  initChamber();
+  
+  // If we're already on the reader view (deep link), init now
+  if (window.location.hash.startsWith("#reader")) {
+    initChamber();
+  }
   window.setChamberFromInput = setChamberFromInput;
 
   window.navigateToShelf = function() {
@@ -1233,10 +1266,11 @@
         const pgInput = document.getElementById('input-pg');
         if (pgInput) pgInput.value = 1;
         
-        const bookChamber = encodeAddress(BigInt(book.seed));
+        const chamber = encodeAddress(config.currentAddress);
         const panel = document.getElementById('reader-panel');
         if (panel) panel.classList.remove('hidden');
-        openChamberPage(bookChamber);
+        if (window.__orbitControls) window.__orbitControls.enabled = false;
+        if (window.generatePage) window.generatePage(chamber, 1, false);
       }
     }
   };
