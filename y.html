@@ -20,7 +20,7 @@
             pointer-events: none;
             mix-blend-mode: overlay;
             opacity: 0.15;
-            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.5'/%3E%3C/svg%3E");
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.15'/%3E%3C/svg%3E");
         }
         
         /* Subtle vignette */
@@ -61,7 +61,7 @@
         }
     </style>
 </head>
-<body class="text-[#d6d1c7] antialiased selection:bg-[#d97743]/30 flex h-screen w-screen overflow-hidden">
+    <body class="text-[#d6d1c7] antialiased selection:bg-[#d97743]/30 flex h-screen w-screen overflow-hidden">
 
     <!-- Left Sidebar UI -->
     <div class="w-80 bg-[#1e1c1a]/95 backdrop-blur-md shadow-[4px_0_24px_rgba(0,0,0,0.3)] border-r border-[#332f2b] flex flex-col z-10 flex-shrink-0 relative">
@@ -236,6 +236,7 @@
             density: 2,
             centerType: 'OPEN',
             centerSides: 6,
+            spiralMode: 'up',
             layout: [] 
         };
 
@@ -255,7 +256,6 @@
             return c;
         };
 
-        // Light Charcoal style ink for dark background
         const INK_MAIN = cVec(0xa39a90, 0.7); 
         const INK_FAINT = cVec(0x857d74, 0.4);
         const INK_HEAVY = cVec(0xcbc0b4, 0.95);
@@ -396,10 +396,16 @@
             let seed = hashBigInt(addrBigInt);
             let rng = mulberry32(seed);
 
-            // Minimum radius fixed to 400 to prevent claustrophobia
-            let radius = Math.floor(rng() * 350) + 400; 
-            // Minimum height fixed to 250
-            let height = Math.floor(rng() * 250) + 250; 
+            const minRadius = 400;
+            const maxRadius = 750;
+            const minHeight = 250;
+            const maxHeight = 500;
+            const minClearance = 140;
+            const sizeBias = 0.6;
+
+            // Bias toward larger rooms to avoid cramped layouts
+            let radius = Math.floor(Math.pow(rng(), sizeBias) * (maxRadius - minRadius)) + minRadius;
+            let height = Math.floor(Math.pow(rng(), sizeBias) * (maxHeight - minHeight)) + minHeight;
             
             let roughness = rng() * 3.0; 
             let density = Math.floor(rng() * 4) + 1; 
@@ -409,12 +415,24 @@
             const sidesOptions = [3, 4, 6, 8];
             let centerSides = sidesOptions[Math.floor(rng() * sidesOptions.length)];
             
-            // Adjust well radius relative to larger room
-            let wellRadius = Math.floor(rng() * 100) + 120; 
+            // Keep a hard clearance between center and outer walls
+            const minWellRadius = 120;
+            if (radius < minWellRadius + minClearance) {
+                radius = minWellRadius + minClearance;
+            }
+            const maxWellRadius = Math.max(minWellRadius, radius - minClearance);
+            let wellRadius = Math.floor(Math.pow(rng(), 0.7) * (maxWellRadius - minWellRadius)) + minWellRadius;
             
             let isFromSpiralUp = (addrBigInt % BigInt(10) === BigInt(7));
             let isFromSpiralDown = (addrBigInt % BigInt(10) === BigInt(8));
             if (isFromSpiralUp || isFromSpiralDown) centerType = 'SPIRAL_STAIRS';
+
+            let spiralMode = null;
+            if (centerType === 'SPIRAL_STAIRS') {
+                if (isFromSpiralUp) spiralMode = 'down';
+                else if (isFromSpiralDown) spiralMode = 'up';
+                else spiralMode = rng() > 0.5 ? 'up' : 'down';
+            }
 
             let walls = [];
             const passageTypes = ['HALLWAY', 'STAIRS_DOWN', 'STAIRS_UP'];
@@ -426,7 +444,7 @@
             if (!walls.some(w => passageTypes.includes(w))) {
                 walls[Math.floor(rng() * 6)] = passageTypes[Math.floor(rng() * passageTypes.length)];
             }
-            return { radius, height, roughness, density, walls, centerType, centerSides, wellRadius };
+            return { radius, height, roughness, density, walls, centerType, centerSides, wellRadius, spiralMode };
         }
 
         function generateLayoutForAddress(addr) {
@@ -451,6 +469,7 @@
             config.height = room.height; config.roughness = room.roughness;
             config.density = room.density; config.layout = room.walls;
             config.centerType = room.centerType; config.centerSides = room.centerSides;
+            config.spiralMode = room.spiralMode || 'up';
             
             updateUIState();
         }
@@ -502,14 +521,14 @@
 
         const scene = new THREE.Scene();
         const camera = new THREE.PerspectiveCamera(45, (window.innerWidth - 320) / window.innerHeight, 1, 5000);
-        camera.position.set(0, 500, 800);
+        camera.position.set(1200, 820, 1200);
 
         const controls = new THREE.OrbitControls(camera, renderer.domElement);
         controls.enableDamping = true;
         controls.dampingFactor = 0.05;
         controls.maxPolarAngle = Math.PI / 2 - 0.05; 
-        controls.minDistance = 100;
-        controls.maxDistance = 2000;
+        controls.minDistance = 500;
+        controls.maxDistance = 2600;
         
         let preZoomPos = null;
         let preZoomTarget = null;
@@ -726,7 +745,15 @@
             const R = config.radius; const rWell = config.wellRadius; const H = config.height;
             const V_out = getHexVertices(R, 0);
 
-            for(let i=0; i<6; i++) builder.addSolidTriangle(new THREE.Vector3(0,0,0), V_out[i], V_out[(i+1)%6], COLOR_FILL_LIGHT);
+            if (config.centerType === 'SPIRAL_STAIRS' && config.spiralMode === 'down') {
+                const holeRadius = rWell + 8;
+                const V_in = getHexVertices(holeRadius, 0);
+                for (let i = 0; i < 6; i++) {
+                    builder.addSolidQuad(V_in[i], V_in[(i+1)%6], V_out[(i+1)%6], V_out[i], COLOR_FILL_LIGHT);
+                }
+            } else {
+                for(let i=0; i<6; i++) builder.addSolidTriangle(new THREE.Vector3(0,0,0), V_out[i], V_out[(i+1)%6], COLOR_FILL_LIGHT);
+            }
             
             for(let z=-R; z<=R; z+=12) {
                 let limitOut = getHexXBound(z, R);
@@ -792,15 +819,18 @@
                 }
                 group.add(builder.build());
             } else if (config.centerType === 'SPIRAL_STAIRS') {
+                const isDown = config.spiralMode === 'down';
+                const stairHeight = isDown ? config.depth : H;
+                const yDir = isDown ? -1 : 1;
                 for(let i=0; i<config.centerSides; i++) {
                     let p1 = getPolygonVertices(rWell*0.3, 0, config.centerSides)[i];
                     let p2 = getPolygonVertices(rWell*0.3, 0, config.centerSides)[(i+1)%config.centerSides];
-                    builder.addSolidQuad(p1, p2, new THREE.Vector3(p2.x, H, p2.z), new THREE.Vector3(p1.x, H, p1.z), COLOR_FILL_DARK);
+                    builder.addSolidQuad(p1, p2, new THREE.Vector3(p2.x, yDir * stairHeight, p2.z), new THREE.Vector3(p1.x, yDir * stairHeight, p1.z), COLOR_FILL_DARK);
                 }
                 const numSteps = 40;
                 for(let i=0; i<numSteps; i++) {
                     let angle = (i / numSteps) * Math.PI * 4, angle2 = ((i+1) / numSteps) * Math.PI * 4;
-                    let y1 = (i / numSteps) * H, y2 = ((i+1) / numSteps) * H;
+                    let y1 = yDir * (i / numSteps) * stairHeight, y2 = yDir * ((i+1) / numSteps) * stairHeight;
                     
                     let p1 = new THREE.Vector3(Math.cos(angle)*rWell, y1, -Math.sin(angle)*rWell), p2 = new THREE.Vector3(Math.cos(angle2)*rWell, y2, -Math.sin(angle2)*rWell);
                     let pInner1 = new THREE.Vector3(Math.cos(angle)*rWell*0.3, y1, -Math.sin(angle)*rWell*0.3), pInner2 = new THREE.Vector3(Math.cos(angle2)*rWell*0.3, y2, -Math.sin(angle2)*rWell*0.3);
@@ -809,26 +839,36 @@
                     let pRail1 = p1.clone().setY(y1 + 25), pRail2 = p2.clone().setY(y2 + 25);
                     builder.addSolidQuad(p1, p2, pRail2, pRail1, COLOR_FILL_MID);
                     if (i > 0) {
-                        let prevY = ((i-1) / numSteps) * H;
+                        let prevY = yDir * ((i-1) / numSteps) * stairHeight;
                         builder.addSolidQuad(pInner1.clone().setY(prevY), p1.clone().setY(prevY), p1, pInner1, COLOR_FILL_DARK);
                     }
                     builder.addSketchLine(pInner1, p1, INK_MAIN, 1); builder.addSketchLine(p1, p2, INK_HEAVY, 1.5);
                     builder.addSketchLine(pRail1, pRail2, INK_MAIN, 1.5); builder.addSketchLine(p1, pRail1, INK_FAINT, 0.5); 
+                }
+
+                if (isDown) {
+                    const V_bottom = getPolygonVertices(rWell, -config.depth, config.centerSides);
+                    for (let i = 0; i < config.centerSides; i++) {
+                        builder.addSolidTriangle(new THREE.Vector3(0, -config.depth, 0), V_bottom[i], V_bottom[(i+1)%config.centerSides], COLOR_FILL_MID);
+                        builder.addSketchLine(V_bottom[i], V_bottom[(i+1)%config.centerSides], INK_MAIN, 1);
+                    }
                 }
                 group.add(builder.build());
 
                 let isFromUp = (config.currentAddress % BigInt(10) === BigInt(7));
                 let isFromDown = (config.currentAddress % BigInt(10) === BigInt(8));
 
-                const hitUpMesh = new THREE.Mesh(new THREE.CylinderGeometry(rWell+2, rWell+2, H/2, 12), new THREE.MeshBasicMaterial({visible: false, side: THREE.DoubleSide}));
-                hitUpMesh.position.set(0, H * 0.75, 0); hitUpMesh.frustumCulled = false;
-                hitUpMesh.userData = { isPassage: true, type: 'SPIRAL_STAIRS_UP', targetAddress: config.currentAddress * BigInt(10) + BigInt(7), isReturn: isFromDown, parentGroup: group };
-                group.add(hitUpMesh); interactables.push(hitUpMesh);
-
-                const hitDownMesh = new THREE.Mesh(new THREE.CylinderGeometry(rWell+2, rWell+2, H/2, 12), new THREE.MeshBasicMaterial({visible: false, side: THREE.DoubleSide}));
-                hitDownMesh.position.set(0, H * 0.25, 0); hitDownMesh.frustumCulled = false;
-                hitDownMesh.userData = { isPassage: true, type: 'SPIRAL_STAIRS_DOWN', targetAddress: isFromUp ? (config.currentAddress / BigInt(10)) : (config.currentAddress * BigInt(10) + BigInt(8)), isReturn: isFromUp, parentGroup: group };
-                group.add(hitDownMesh); interactables.push(hitDownMesh);
+                if (config.spiralMode === 'up') {
+                    const hitUpMesh = new THREE.Mesh(new THREE.CylinderGeometry(rWell+2, rWell+2, H/2, 12), new THREE.MeshBasicMaterial({visible: false, side: THREE.DoubleSide}));
+                    hitUpMesh.position.set(0, H * 0.75, 0); hitUpMesh.frustumCulled = false;
+                    hitUpMesh.userData = { isPassage: true, type: 'SPIRAL_STAIRS_UP', targetAddress: config.currentAddress * BigInt(10) + BigInt(7), isReturn: isFromDown, parentGroup: group };
+                    group.add(hitUpMesh); interactables.push(hitUpMesh);
+                } else {
+                    const hitDownMesh = new THREE.Mesh(new THREE.CylinderGeometry(rWell+2, rWell+2, config.depth, 12), new THREE.MeshBasicMaterial({visible: false, side: THREE.DoubleSide}));
+                    hitDownMesh.position.set(0, -config.depth * 0.5, 0); hitDownMesh.frustumCulled = false;
+                    hitDownMesh.userData = { isPassage: true, type: 'SPIRAL_STAIRS_DOWN', targetAddress: isFromUp ? (config.currentAddress / BigInt(10)) : (config.currentAddress * BigInt(10) + BigInt(8)), isReturn: isFromUp, parentGroup: group };
+                    group.add(hitDownMesh); interactables.push(hitDownMesh);
+                }
             }
             return group;
         }
@@ -1080,8 +1120,8 @@
 
             for (let book of ud.books) {
                 if (localX >= book.xStart && localX <= book.xEnd && localY >= book.yBase && localY <= book.yTop) {
-                    let rng = mulberry32(book.seed);
-                    alert("📖 BOOK TITLE:\n\n" + generateBookTitle(rng));
+                    const chamber = encodeAddress(config.currentAddress);
+                    window.location.href = `index.html#reader/${encodeURIComponent(chamber)}`;
                     return;
                 }
             }
@@ -1102,9 +1142,8 @@
                 generateLayoutForAddress(config.currentAddress);
                 buildChamber();
                 
-                const angles = [0, Math.PI/3, 2*Math.PI/3, Math.PI, 4*Math.PI/3, 5*Math.PI/3];
-                const startAngle = angles[Math.floor(Math.random()*angles.length)];
-                camera.position.set(Math.cos(startAngle)*800, 500, Math.sin(startAngle)*800);
+                const startAngle = Math.PI / 4;
+                camera.position.set(Math.cos(startAngle) * 1400, 820, Math.sin(startAngle) * 1400);
                 controls.target.set(0,0,0);
                 camera.fov = 45; camera.updateProjectionMatrix(); controls.update();
 

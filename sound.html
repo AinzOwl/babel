@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Ancient Archives</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background-color: #1a1614;
+            /* Deep ancient dark brown/charcoal */
+            color: #d4c4a8;
+            /* Parchment white */
+            font-family: 'Georgia', 'Times New Roman', serif;
+            /* Ancient text feel */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+            background-image:
+                linear-gradient(rgba(26, 22, 20, 0.85), rgba(26, 22, 20, 0.95)),
+                url('data:image/svg+xml;utf8,<svg width="150" height="150" xmlns="http://www.w3.org/2000/svg"><text x="20" y="30" fill="rgba(212,196,168,0.03)" font-family="serif" font-size="20">⍙</text><text x="80" y="90" fill="rgba(212,196,168,0.02)" font-family="serif" font-size="24">⍾</text></svg>');
+        }
+
+        #visualizer {
+            width: 80%;
+            max-width: 600px;
+            height: 150px;
+            margin-top: 2rem;
+            position: relative;
+            opacity: 0.8;
+        }
+
+        .hex-part {
+            position: absolute;
+            font-size: 2rem;
+            opacity: 0;
+            transition: opacity 3s ease-in-out;
+            color: #b48e5d;
+            /* Faded gold / brass */
+        }
+
+        .playing .hex-part {
+            opacity: 1;
+        }
+
+        button {
+            transition: all 0.4s ease;
+        }
+
+        button:hover {
+            transform: scale(1.02);
+            box-shadow: 0 0 20px rgba(180, 142, 93, 0.3);
+        }
+    </style>
+</head>
+
+<body class="text-center">
+
+    <div
+        class="max-w-2xl px-6 py-10 bg-stone-900/60 backdrop-blur-md rounded border border-stone-700/50 shadow-[0_10px_40px_rgba(0,0,0,0.8)]">
+        <h1 class="text-4xl font-bold mb-4 tracking-[0.2em] text-amber-100/70">THE ANCIENT ARCHIVES</h1>
+        <p class="text-stone-400 mb-8 text-lg italic leading-relaxed">"In the dust of forgotten millennia, the scrolls
+            whisper of a time before time..."</p>
+
+        <button id="toggleBtn"
+            class="bg-stone-800 hover:bg-stone-700 text-amber-200/70 font-semibold py-3 px-8 rounded border border-stone-600 shadow-lg tracking-widest uppercase">
+            ENTER THE ARCHIVES
+        </button>
+
+        <div id="status" class="mt-6 text-sm text-stone-500 h-6 tracking-wider">Silence...</div>
+    </div>
+
+    <div id="visualizer"></div>
+
+    <script>
+        let isPlaying = false;
+
+        // Massive, unending reverb for a stone cathedral/library feel
+        const ancientReverb = new Tone.Reverb({
+            decay: 18,     // Long decay for huge stone halls
+            preDelay: 0.15,
+            wet: 0.85       // Very wet
+        }).toDestination();
+
+        // A lowpass filter to create the muffled, dusty atmosphere
+        const dustFilter = new Tone.Filter(600, "lowpass").connect(ancientReverb);
+
+        const baseUrl = "https://gleitz.github.io/midi-js-soundfonts/FluidR3_GM/";
+
+        // --- The Monastic Choir ---
+        // Using real choir samples, filtered to sound distant
+        const choirSampler = new Tone.Sampler({
+            urls: {
+                "C3": "C3.mp3",
+                "C4": "C4.mp3",
+                "C5": "C5.mp3"
+            },
+            baseUrl: baseUrl + "choir_aahs-mp3/",
+            attack: 3,     // Slow swell for smooth breathing
+            release: 4,    // Long tail
+            volume: -10
+        }).connect(dustFilter);
+
+        // --- The Ancient Lyre (Acoustic Nylon Guitar) ---
+        // Authentic plucked gut-string sound
+        const lyreSampler = new Tone.Sampler({
+            urls: {
+                "C3": "C3.mp3",
+                "C4": "C4.mp3",
+                "C5": "C5.mp3"
+            },
+            baseUrl: baseUrl + "acoustic_guitar_nylon-mp3/",
+            volume: -4
+        }).connect(ancientReverb);
+
+        // --- The Bone Flute ---
+        // Real flute recordings mapped across the keyboard
+        const fluteSampler = new Tone.Sampler({
+            urls: {
+                "C4": "C4.mp3",
+                "C5": "C5.mp3",
+                "C6": "C6.mp3"
+            },
+            baseUrl: baseUrl + "flute-mp3/",
+            attack: 2,     // Soft, breathy initiation
+            release: 3,
+            volume: -6
+        }).connect(ancientReverb);
+
+        // Phrygian Dominant / Dorian hybrid scale for an ancient, mystical, slightly middle-eastern feel
+        const lyreNotes = ["D3", "F3", "G3", "A3", "C4", "D4", "E4", "F4", "A4"];
+        const fluteNotes = ["D4", "E4", "F4", "G4", "A4", "D5"];
+        const droneNotes = ["D2", "A1", "F2", "C2"];
+
+        // Sparse, floating plucks of the ancient lyre
+        const lyreLoop = new Tone.Loop((time) => {
+            // Only play 25% of the time, keeping it very sparse
+            if (Math.random() > 0.75) {
+                const randomNote = lyreNotes[Math.floor(Math.random() * lyreNotes.length)];
+                const velocity = 0.4 + Math.random() * 0.4;
+                lyreSampler.triggerAttackRelease(randomNote, "2n", time, velocity);
+                spawnVisualRune();
+            }
+        }, "4n");
+
+        // Haunting, slow flute phrases
+        const fluteLoop = new Tone.Loop((time) => {
+            // Rarely triggers (15% chance)
+            if (Math.random() > 0.85) {
+                const randomNote = fluteNotes[Math.floor(Math.random() * fluteNotes.length)];
+                fluteSampler.triggerAttackRelease(randomNote, "1m", time);
+            }
+        }, "2m");
+
+        // Slowly shift the underlying monastic chanting
+        function shiftDrone() {
+            if (!isPlaying) return;
+
+            const targetNote = droneNotes[Math.floor(Math.random() * droneNotes.length)];
+            const duration = 15 + Math.random() * 10; // Hold the breath for 15-25 seconds
+
+            // Trigger a long choral swell
+            choirSampler.triggerAttackRelease(targetNote, duration);
+
+            // Schedule the next choir breath to overlap slightly before this one ends
+            Tone.Transport.scheduleOnce(() => shiftDrone(), `+${duration - 3}`);
+        }
+
+        const visualizer = document.getElementById('visualizer');
+        // Ancient symbols/runes instead of standard alphabet
+        const runes = "⍙⍣⍆⍎⍏⍫⍱⍲⍭⍡⍷⍾⎃⎅⎈⎓⎗⎘⎕⎔";
+
+        function spawnVisualRune() {
+            if (!isPlaying) return;
+            const rune = document.createElement('div');
+            rune.className = 'hex-part';
+            rune.innerText = runes[Math.floor(Math.random() * runes.length)];
+
+            rune.style.left = `${Math.random() * 90}%`;
+            rune.style.top = `${Math.random() * 80}%`;
+
+            visualizer.appendChild(rune);
+            void rune.offsetWidth;
+
+            rune.style.opacity = (Math.random() * 0.6 + 0.2).toString();
+
+            setTimeout(() => {
+                rune.style.opacity = '0';
+                setTimeout(() => rune.remove(), 3000);
+            }, 4000 + Math.random() * 3000);
+        }
+
+        const btn = document.getElementById('toggleBtn');
+        const statusText = document.getElementById('status');
+
+        btn.addEventListener('click', async () => {
+            if (!isPlaying) {
+                btn.innerText = "GATHERING RELICS...";
+                statusText.innerText = "Loading ancient instrument recordings...";
+                btn.disabled = true; // Prevent clicking while downloading heavy MP3s
+
+                await Tone.start();
+                await Tone.loaded(); // Wait for all mp3 files to download
+
+                Tone.Transport.bpm.value = 50; // Very slow tempo
+
+                await ancientReverb.generate();
+                Tone.Transport.start();
+
+                lyreLoop.start(0);
+                fluteLoop.start(0);
+
+                shiftDrone(); // Trigger the first choir swell
+
+                document.body.classList.add('playing');
+                btn.innerText = "DEPART THE ARCHIVES";
+                statusText.innerText = "Unearthing forgotten scrolls...";
+                btn.disabled = false;
+                isPlaying = true;
+            } else {
+                Tone.Transport.stop();
+                lyreLoop.stop();
+                fluteLoop.stop();
+
+                choirSampler.releaseAll();
+
+                Tone.Transport.cancel();
+
+                document.body.classList.remove('playing');
+                btn.innerText = "ENTER THE ARCHIVES";
+                statusText.innerText = "Silence...";
+                isPlaying = false;
+                visualizer.innerHTML = '';
+            }
+        });
+    </script>
+</body>
+
+</html>

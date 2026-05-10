@@ -9,12 +9,24 @@ const state = {
   modelLoading: false,
   useWebGPU: false,
   llmEngine: null,
-  address: { chamber: '0' },
   isGenerating: false,
   currentGenId: null,
+  currentAbortController: null,
   engineType: localStorage.getItem('babel_engine_type') || 'local',
   localModel: localStorage.getItem('babel_local_model') || 'SmolLM2-135M-Instruct-q0f16-MLC',
   apiSettings: JSON.parse(localStorage.getItem('babel_api_settings') || '{"url": "", "model": "", "key": ""}'),
+  address: { chamber: '', vol: 1, totalPages: 410, currentPage: 1 },
+};
+
+// Global functions for Oracle Modal
+window.openOracleModal = function() {
+  const modal = document.getElementById('oracle-modal');
+  if (modal) modal.classList.remove('hidden');
+};
+
+window.closeOracleModal = function() {
+  const modal = document.getElementById('oracle-modal');
+  if (modal) modal.classList.add('hidden');
 };
 
 const CONSENT_KEY = 'babel_model_consent';
@@ -244,10 +256,9 @@ function initSettingsUI() {
   });
 
   document.querySelector(`input[name="engine-type"][value="${state.engineType}"]`).checked = true;
-  document.getElementById('input-api-url').value = state.apiSettings.url;
-  document.getElementById('input-api-model').value = state.apiSettings.model;
-  document.getElementById('input-api-key').value = state.apiSettings.key;
-
+  document.getElementById('api-url').value = state.apiSettings.url || '';
+  document.getElementById('input-api-model').value = state.apiSettings.model || '';
+  document.getElementById('input-api-key').value = state.apiSettings.key || '';
   toggleEngineType();
 }
 
@@ -283,7 +294,7 @@ function saveLocalModel() {
 
 function saveApiSettings() {
   state.apiSettings = {
-    url: document.getElementById('input-api-url').value.trim(),
+    url: document.getElementById('api-url').value.trim(),
     model: document.getElementById('input-api-model').value.trim(),
     key: document.getElementById('input-api-key').value.trim()
   };
@@ -388,12 +399,12 @@ const categoryCache = new Map();
 
 async function getCategory(chamber) {
   const hashVal = Math.abs(hashStr(chamber));
-  const chunkIndex = String(hashVal % 380).padStart(3, '0');
+  const chunkIndex = String((hashVal % 300) + 1).padStart(3, '0');
   const entryIndex = hashVal % 100;
-  
+
   if (!categoryCache.has(chunkIndex)) {
     try {
-      const res = await fetch('./chunks/c' + chunkIndex + '.json');
+      const res = await fetch('./chunks/categories-' + chunkIndex + '.json');
       if (res.ok) {
         const arr = await res.json();
         categoryCache.set(chunkIndex, arr);
@@ -405,32 +416,54 @@ async function getCategory(chamber) {
     }
   }
   const arr = categoryCache.get(chunkIndex);
-  if (!arr || arr.length === 0) return "Books > Literature & Fiction > General";
-  return arr[entryIndex % arr.length];
+  if (!arr || arr.length === 0) return "Literature & Fiction > General";
+  const item = arr[entryIndex % arr.length];
+  return typeof item === 'object' ? (item.path || item.category || JSON.stringify(item)) : String(item);
 }
 
 async function callLLM(messages, options, onChunk = null, genId = null) {
   if (state.engineType === 'api') {
-    const response = await fetch(`${state.apiSettings.url}/chat/completions`, {
+    const realTarget = state.apiSettings.url.replace(/\/+$/, '') + '/chat/completions';
+    const endpoint = realTarget;
+    
+    const body = {
+      model: state.apiSettings.model || 'gpt-3.5-turbo',
+      messages: Array.isArray(messages) ? messages : [],
+      temperature: typeof options.temperature === 'number' ? options.temperature : 0.7,
+      max_tokens: options.max_tokens || 2048,
+      stream: options.stream || false
+    };
+
+    if (options.seed !== undefined && options.seed !== null) body.seed = Number(options.seed);
+    
+    const response = await fetch(endpoint, {
       method: 'POST',
+      mode: 'cors',
+      signal: options.signal, // Pass the abort signal here!
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${state.apiSettings.key}`
+        ...(state.apiSettings.key ? { 'Authorization': `Bearer ${state.apiSettings.key.trim()}` } : {})
       },
-      body: JSON.stringify({
-        model: state.apiSettings.model,
-        messages: messages,
-        temperature: options.temperature || 0,
-        max_tokens: options.max_tokens || 3800,
-        top_p: 1,
-        frequency_penalty: 1.5,
-        presence_penalty: 1.5,
-        stream: options.stream || false,
-        seed: options.seed
-      })
+      body: JSON.stringify(body)
     });
 
-    if (!response.ok) throw new Error(`API Error: ${response.status}`);
+    if (!response.ok) {
+      let errorPayload = null;
+      let errorText = `API Error: ${response.status}`;
+      try {
+        errorPayload = await response.json();
+        const apiMessage = errorPayload?.error?.message || errorPayload?.message;
+        const apiCode = errorPayload?.error?.code || errorPayload?.code;
+        if (apiMessage) {
+          errorText = apiCode ? `${apiMessage} (${apiCode})` : apiMessage;
+        }
+      } catch (e) {
+        // Non-JSON error body.
+      }
+      const err = new Error(errorText);
+      err.apiPayload = errorPayload;
+      throw err;
+    }
 
     if (options.stream) {
       const reader = response.body.getReader();
@@ -449,7 +482,7 @@ async function callLLM(messages, options, onChunk = null, genId = null) {
               const delta = data.choices[0]?.delta?.content || '';
               fullText += delta;
               if (onChunk) onChunk(fullText);
-            } catch (e) {}
+            } catch (e) { }
           }
         }
       }
@@ -501,9 +534,18 @@ async function callLLM(messages, options, onChunk = null, genId = null) {
   }
 }
 
-async function generatePage(chamber) {
+async function generatePage(chamber, vol = 1, enforceQuery = true, overridePage = null) {
+  // Cancel any existing generation
+  if (state.currentAbortController) {
+    state.currentAbortController.abort();
+  }
+  
+  const controller = new AbortController();
+  state.currentAbortController = controller;
+  state.isGenerating = true;
+
   // Update state address
-  state.address = { chamber };
+  state.address = { ...state.address, chamber, vol };
 
   // Update URL
   if (state.view === 'reader') {
@@ -518,9 +560,9 @@ async function generatePage(chamber) {
     _showOracleAsleep();
     return;
   }
-  if (state.engineType === 'api' && (!state.apiSettings.url || !state.apiSettings.model || !state.apiSettings.key)) {
+  if (state.engineType === 'api' && (!state.apiSettings.url || !state.apiSettings.model)) {
     showToast('API Settings incomplete. Configure in Settings.');
-    switchView('settings');
+    openOracleModal();
     return;
   }
 
@@ -534,22 +576,36 @@ async function generatePage(chamber) {
   const genId = Date.now();
   state.currentGenId = genId;
 
-  const seed = hashStr(chamber);
+  const seed = hashStr(chamber + ':vol:' + vol);
   const rngDerive = new SeededRNG(seed);
 
   // Derive deterministic UI values from chamber
-  const bookCount = 1 + (rngDerive.next() % 24);
-  const shelfCount = 3 + (rngDerive.next() % 22);
-  const volCount = 1 + (rngDerive.next() % 8);
-  const pageCount = 1 + (rngDerive.next() % 410);
+  const bookCount = 1 + (rngDerive.next() % 24);   // books on this shelf: 1–24
+  const shelfCount = 3 + (rngDerive.next() % 22);  // shelves: 3–24
+  const maxVols = 1 + (rngDerive.next() % 8);       // max volumes: 1–8
+  state.address.maxVols = maxVols;
+  state.address.bookCount = bookCount;
+  state.address.shelfCount = shelfCount;
 
   // Update UI Inputs
-  document.getElementById('input-hex').value = chamber;
-  document.getElementById('input-wall').value = bookCount;
-  document.getElementById('input-shelf').value = shelfCount;
-  document.getElementById('input-vol').value = volCount;
-  document.getElementById('input-pg').value = pageCount;
+  const chamberInput = document.getElementById('chamber-input');
+  if (chamberInput) chamberInput.value = chamber;
+  
+  const inputVol = document.getElementById('input-vol');
+  if (inputVol) {
+    inputVol.value = vol;
+    inputVol.max = maxVols;
+  }
+  document.getElementById('input-pg').value = '';
+  document.getElementById('input-pg').placeholder = '...';
   document.getElementById('display-seed').innerText = seed;
+  // Update range labels
+  const maxVolsEl = document.getElementById('display-max-vols');
+  if (maxVolsEl) maxVolsEl.innerText = maxVols;
+  const maxPgEl = document.getElementById('display-max-pg');
+  if (maxPgEl) maxPgEl.innerText = '...';
+  const booksRangeEl = document.getElementById('display-books-range');
+  if (booksRangeEl) booksRangeEl.innerText = `${Math.max(1, bookCount - 3)}–${bookCount}`;
 
   const textEl = document.getElementById('page-content');
   const genIndicator = document.getElementById('gen-indicator');
@@ -567,67 +623,111 @@ async function generatePage(chamber) {
     statusText.innerText = 'Locating volume...';
     const categoryPath = await getCategory(chamber);
 
+    // Decode search query early — it anchors language for all 3 calls
+    const decodedText = decodeChamberToUTF8(chamber);
+    const isSearchChamber = decodedText && decodedText.trim().length > 0;
+    const hasQuery = enforceQuery && isSearchChamber;
+
     statusText.innerText = 'Extracting metadata...';
-    let meta = { title: "Unknown Volume", language: "English", about: "A forgotten and obscure text." };
-    for (let i = 0; i < 3; i++) {
-      try {
-        const res = await callLLM([
-          { role: 'system', content: 'You are a book metadata generator. You always respond in valid JSON with no extra text, no markdown, no code blocks.' },
-          { role: 'user', content: `Given this Amazon book category path: ${categoryPath}, and this unique identifier: ${seed}, generate metadata for one specific book that could exist in this category. Respond with exactly this JSON structure: {"title": "", "language": "", "about": ""}. The language field must be a natural language name like English or Arabic or Japanese. The about field must be 2 to 3 sentences describing what this specific book is about. Be specific and creative, not generic.` }
-        ], { seed, stream: false });
-        
-        let jsonStr = res.replace(/```json/g, '').replace(/```/g, '').trim();
-        let firstBrace = jsonStr.indexOf('{');
-        let lastBrace = jsonStr.lastIndexOf('}');
-        if (firstBrace !== -1 && lastBrace !== -1) {
-          meta = JSON.parse(jsonStr.substring(firstBrace, lastBrace + 1));
-          break;
-        }
-      } catch (e) { }
+    // Document metadata is per-chamber (shared across volumes)
+    const bookSeed = hashStr(chamber);
+    let meta = { title: "Unknown Document", language: "English", documentType: "document", about: "A forgotten and obscure text." };
+    try {
+      let call1User = `Given this archive category: ${categoryPath}, and this unique identifier: ${bookSeed}, imagine any written document that could possibly exist or never exist in any universe, reality, or fiction that relates even loosely to this category. It can be anything written \u2014 a refrigerator repair log from 1823, a demon's grocery list, a tax record from ancient Babylon, a love letter written by a machine, a fake legal contract between two gods, a recipe for a dish that cannot physically exist, a ship manifest from a voyage to a fictional planet, a child's homework from the year 3000, a ledger of imaginary debts, a sermon for a religion that never existed, a field guide to extinct imaginary creatures, a maintenance manual for a time machine, a court transcript from a trial that never happened \u2014 absolutely anything. The only rule is that it must be a written document of some kind and it must relate to the category in any way however loose or absurd. Respond with exactly this JSON structure: {"title": "", "language": "", "documentType": "", "about": ""}. The language field must be a natural language name and should not default to English. The documentType must be specific and creative. The about field must be 2 to 3 sentences. Be wildly specific and creative. Never default to novels. Never default to English. Never be generic.`;
+      if (isSearchChamber) {
+        call1User += ` The document must be written in the same language as this passage which appears in it: "${decodedText.trim()}". Set the language field to match that passage's language.`;
+      }
+      const res = await callLLM([
+        { role: 'system', content: 'You are a document metadata generator. You always respond in valid JSON with no extra text, no markdown, no code blocks.' },
+        { role: 'user', content: call1User }
+      ], { seed: bookSeed, stream: false, signal: controller.signal });
+
+      let jsonStr = res.replace(/```json/g, '').replace(/```/g, '').trim();
+      let firstBrace = jsonStr.indexOf('{');
+      let lastBrace = jsonStr.lastIndexOf('}');
+      if (firstBrace !== -1 && lastBrace !== -1) {
+        meta = JSON.parse(jsonStr.substring(firstBrace, lastBrace + 1));
+      }
+    } catch (e) { 
+      if (e.name === 'AbortError') return;
+      console.error("Metadata call failed:", e);
     }
 
     statusText.innerText = 'Structuring page...';
-    const pageNum = (Math.abs(seed) % 410) + 1;
-    let struct = { totalPages: 410, currentPageSummary: "Mysterious fragmented text.", previousPageSummary: "Unknown past.", nextPageSummary: "Unknown future." };
-    for (let i = 0; i < 3; i++) {
-      try {
-        const res = await callLLM([
-          { role: 'system', content: 'You are a book structure generator. You always respond in valid JSON with no extra text, no markdown, no code blocks.' },
-          { role: 'user', content: `Given this book: title: ${meta.title || meta.Title}, language: ${meta.language || meta.Language}, about: ${meta.about || meta.About}. This is page ${pageNum} of this book. Respond with exactly this JSON structure: {"totalPages": 0, "currentPageSummary": "", "previousPageSummary": "", "nextPageSummary": ""}. The totalPages must be a number between 80 and 410. The currentPageSummary must be 1 to 2 sentences describing what happens or appears on this specific page. The previousPageSummary and nextPageSummary must each be 1 sentence.` }
-        ], { seed, stream: false });
-        
-        let jsonStr = res.replace(/```json/g, '').replace(/```/g, '').trim();
-        let firstBrace = jsonStr.indexOf('{');
-        let lastBrace = jsonStr.lastIndexOf('}');
-        if (firstBrace !== -1 && lastBrace !== -1) {
-          struct = JSON.parse(jsonStr.substring(firstBrace, lastBrace + 1));
-          break;
-        }
-      } catch (e) { }
+    const metaLang = meta.language || meta.Language || 'English';
+    const metaTitle = meta.title || meta.Title || 'Unknown Document';
+    const metaAbout = meta.about || meta.About || 'A forgotten and obscure text.';
+    const metaDocType = meta.documentType || meta.DocumentType || 'document';
+
+    // Page number: if search query, land on a specific deterministic page near start;
+    // otherwise derive from vol-specific seed so each volume has its own page range.
+    const volSeed = hashStr(chamber + ':vol:' + vol);
+    let pageNum;
+    if (overridePage !== null) {
+      pageNum = Math.max(1, overridePage);
+    } else if (isSearchChamber) {
+      pageNum = (Math.abs(hashStr(decodedText)) % 30) + 10; // pages 10-39
+    } else {
+      pageNum = (Math.abs(volSeed) % 410) + 1;
     }
+
+    let struct = { totalPages: 410, currentPageSummary: "Mysterious fragmented text.", previousPageSummary: "Unknown past.", nextPageSummary: "Unknown future." };
+    try {
+      let call2User = `Given this ${metaDocType}: title: ${metaTitle}, language: ${metaLang}, about: ${metaAbout}. This is volume ${vol} of the ${metaDocType}. This is page ${pageNum} of this volume. Respond with exactly this JSON structure: {"totalPages": 0, "currentPageSummary": "", "previousPageSummary": "", "nextPageSummary": ""}. The totalPages is the total number of pages in this volume and must be a number between 80 and 410. The currentPageSummary must be 1 to 2 sentences describing what content appears on this specific page. The previousPageSummary and nextPageSummary must each be 1 sentence.`;
+      if (isSearchChamber) {
+        call2User += ` This page occurs in a document that contains this passage: "${decodedText.trim()}". Use this context to inform the summary, even if the passage does not appear on this specific page.`;
+      }
+      const res = await callLLM([
+        { role: 'system', content: 'You are a document structure generator. You always respond in valid JSON with no extra text, no markdown, no code blocks.' },
+        { role: 'user', content: call2User }
+      ], { seed: volSeed, stream: false, signal: controller.signal });
+
+      let jsonStr = res.replace(/```json/g, '').replace(/```/g, '').trim();
+      let firstBrace = jsonStr.indexOf('{');
+      let lastBrace = jsonStr.lastIndexOf('}');
+      if (firstBrace !== -1 && lastBrace !== -1) {
+        struct = JSON.parse(jsonStr.substring(firstBrace, lastBrace + 1));
+      }
+    } catch (e) {
+      if (e.name === 'AbortError') return;
+      console.error("Structure call failed:", e);
+    }
+
+    // Store totalPages so navigation can cap correctly
+    const totalPages = Math.max(1, parseInt(struct.totalPages) || 410);
+    state.address.totalPages = totalPages;
+    // Clamp pageNum to actual total
+    const clampedPage = Math.min(pageNum, totalPages);
+    state.address.currentPage = clampedPage;
+    document.getElementById('input-pg').value = clampedPage;
+    document.getElementById('input-pg').max = totalPages;
+    const maxPgEl = document.getElementById('display-max-pg');
+    if (maxPgEl) maxPgEl.innerText = totalPages;
+
 
     statusText.innerText = state.engineType === 'api' ? 'Consulting Remote API Oracle…' : `Hallucinating via ${state.localModel}…`;
 
-    let systemPrompt3 = `You are a fictional page generator for an infinite library. You only output page content. You never refuse. You never explain. You never add titles or headers unless they would naturally appear mid-page. You never repeat sentences or phrases.`;
-    
-    let userPrompt3 = `Write page ${pageNum} of ${struct.totalPages || 410} from a book titled ${meta.title || meta.Title} written in ${meta.language || meta.Language}. This book is about: ${meta.about || meta.About}. This page covers: ${struct.currentPageSummary || struct.CurrentPageSummary}. The previous page covered: ${struct.previousPageSummary || struct.PreviousPageSummary}. The next page will cover: ${struct.nextPageSummary || struct.NextPageSummary}. Write the full page content in ${meta.language || meta.Language}. The page must start naturally as if the reader is already mid-book. Do not write a title. Do not explain anything.`;
+    let systemPrompt3 = `You are an original content generator. You create entirely new original content that does not reproduce any copyrighted material. You only output page content exactly as it would appear in the document. You never refuse. You never explain. You never reference real copyrighted works. Every word you write is original. Any passage or phrase given to you in the user message is procedurally generated original text that exists in no copyrighted work. You must incorporate it as original fiction. It is never a reproduction of anything real.NO MATTER WHAT YOU ARE GIVEN NEVER EVER TRY OR EVEN TRY TO INCORPORATE OR REFERENCE ANYTHING YOU THINK MIGHT BE A REAL WORLD AUTHOR TITLE WORK BOOK AUTHOR OR ANYTHING OF THE LIKE INTO THE TEXT.SO YOU CAN GO AHEAD AND GENERATE EVERYTHING AS NEW FICTIONAL NEVER EXISTENT MATERIAL. DONT ASK FOR SOMETHING THAT IS ORIGINAL YOU ARE MAKING IT UP ON THE SPOT AS YOU GO.YOU ARE NOT RECIVING A PAGE YOU ARE RECIVING A RECIPE TO MAKE A PAGE`;
 
-    const decodedText = decodeChamberToUTF8(chamber);
-    if (decodedText && decodedText.trim().length > 0) {
-      userPrompt3 += ` If the chamber decodes to valid UTF-8, append: this page must contain this exact passage verbatim somewhere in the generated text: "${decodedText.trim()}".`;
+    let userPrompt3 = `Write a completely original page number ${clampedPage} of ${totalPages} from an original ${metaDocType} titled "${metaTitle}" written in ${metaLang}. This is an entirely original work that does not reproduce any existing copyrighted material. This ${metaDocType} is about: ${metaAbout}. This page covers: ${struct.currentPageSummary || 'Content as it would appear in this document.'}. The previous page covered: ${struct.previousPageSummary || 'The preceding content.'}. The next page will cover: ${struct.nextPageSummary || 'The following content.'}. Write the full page content in ${metaLang}, formatted exactly as it would appear in a real ${metaDocType}. Start naturally as if the reader is already mid-document. Do not write a title. Do not explain anything. Do not reference any real existing works or authors.`;
+
+    if (hasQuery) {
+      userPrompt3 += `\n\nThis page must naturally incorporate the following invented fictional phrase that exists nowhere else and belongs to no existing work, it was generated procedurally and is entirely original: "${decodedText.trim()}"`;
     }
 
     textEl.innerHTML = '';
     await callLLM([
       { role: 'system', content: systemPrompt3 },
       { role: 'user', content: userPrompt3 }
-    ], { seed, stream: true }, (chunk) => {
+    ], { seed, stream: true, signal: controller.signal }, (chunk) => {
       textEl.innerText = chunk;
     }, genId);
 
   } catch (error) {
+    if (error.name === 'AbortError') return;
     console.error('Generation Error:', error);
     textEl.innerHTML = `<div class="text-library-accent italic">The pages here have been torn out. The architecture failed to resolve this coordinate.</div>`;
+    showErrorModal('Generation failed', error?.message || String(error), error?.apiPayload);
 
 
   } finally {
@@ -643,20 +743,30 @@ async function generatePage(chamber) {
 // NAVIGATION
 // ───────────────────────────────────────────────────────────
 function navigateToPage() {
-  let chamber = document.getElementById('input-hex').value.trim() || CHAMBER_CHARSET[0];
-  state.address = { chamber };
-  generatePage(chamber);
+  let chamberEl = document.getElementById('chamber-input');
+  let chamber = (chamberEl ? chamberEl.value.trim() : '') || CHAMBER_CHARSET[0];
+  const vol = parseInt(document.getElementById('input-vol').value) || 1;
+  state.address = { chamber, vol, totalPages: state.address.totalPages || 410 };
+  generatePage(chamber, vol, false);
 }
 
 function changePage(delta) {
-  let chamber = state.address.chamber;
-  let num = decodeChamber(chamber);
-  num += BigInt(delta);
-  if (num <= 0n) num = 1n; // prevent going negative
+  const chamber = state.address.chamber;
+  const vol = state.address.vol || 1;
+  const totalPages = state.address.totalPages || 410;
+  const currentPage = state.address.currentPage || parseInt(document.getElementById('input-pg').value) || 1;
+  const nextPage = Math.min(Math.max(1, currentPage + delta), totalPages);
+  if (nextPage === currentPage) return; // already at boundary
+  state.address.currentPage = nextPage;
+  generatePage(chamber, vol, false, nextPage);
+}
 
-  chamber = encodeChamber(num);
-  state.address = { chamber };
-  generatePage(chamber);
+function changeVolume(delta) {
+  const chamber = state.address.chamber;
+  const maxVols = state.address.maxVols || 8;
+  const vol = Math.min(maxVols, Math.max(1, (state.address.vol || 1) + delta));
+  state.address = { chamber, vol, totalPages: 410, maxVols }; // reset totalPages until LLM responds
+  generatePage(chamber, vol, false);
 }
 
 function randomPage() {
@@ -665,9 +775,8 @@ function randomPage() {
   let num = 0n;
   for (let b of bytes) num = (num << 8n) | BigInt(b);
   const chamber = encodeChamber(num);
-
-  state.address = { chamber };
-  generatePage(chamber);
+  state.address = { chamber, vol: 1, totalPages: 410 };
+  generatePage(chamber, 1, false);
 }
 
 // ───────────────────────────────────────────────────────────
@@ -682,11 +791,11 @@ function executeSearch() {
   if (!query) return;
 
   const { chamber } = searchToAddress(query);
-  state.address = { chamber };
+  state.address = { chamber, vol: 1, totalPages: 410 };
 
   showToast(`Query securely hashed into the infinite index.`);
   switchView('reader');
-  generatePage(chamber);
+  generatePage(chamber, 1, true); // enforceQuery = true
 }
 
 // ───────────────────────────────────────────────────────────
@@ -719,6 +828,37 @@ function showToast(msg) {
   toastTimeout = setTimeout(() => {
     toast.classList.add('translate-y-20', 'opacity-0');
   }, 3000);
+}
+
+function showErrorModal(title, message, payload = null) {
+  const modal = document.getElementById('error-modal');
+  if (!modal) {
+    showToast(message || title);
+    return;
+  }
+  const titleEl = document.getElementById('error-modal-title');
+  const messageEl = document.getElementById('error-modal-message');
+  const detailEl = document.getElementById('error-modal-detail');
+
+  if (titleEl) titleEl.innerText = title || 'Request failed';
+  if (messageEl) messageEl.innerText = message || 'An unexpected error occurred.';
+  if (detailEl) {
+    if (payload) {
+      detailEl.innerText = JSON.stringify(payload, null, 2);
+      detailEl.classList.remove('hidden');
+    } else {
+      detailEl.innerText = '';
+      detailEl.classList.add('hidden');
+    }
+  }
+
+  modal.classList.remove('hidden');
+  lucide.createIcons();
+}
+
+function hideErrorModal() {
+  const modal = document.getElementById('error-modal');
+  if (modal) modal.classList.add('hidden');
 }
 
 // ───────────────────────────────────────────────────────────

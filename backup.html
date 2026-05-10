@@ -15,33 +15,10 @@
     href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=IBM+Plex+Mono:ital,wght@0,300;0,400;0,500;1,300&display=swap"
     rel="stylesheet">
 
-  
-    <!-- Error Modal -->
-    <div id="error-modal" class="hidden fixed inset-0 z-[220] flex items-center justify-center">
-      <div class="absolute inset-0 bg-black/75 backdrop-blur-sm" onclick="hideErrorModal()"></div>
-      <div class="relative bg-library-panel border border-library-border rounded-xl p-8 max-w-lg w-full mx-4 shadow-2xl animate-fade-in">
-        <div class="flex items-center gap-3 mb-4">
-          <i data-lucide="alert-triangle" class="w-6 h-6 text-library-accent flex-shrink-0"></i>
-          <h2 id="error-modal-title" class="font-serif text-2xl text-library-text">Request failed</h2>
-        </div>
-        <p id="error-modal-message" class="text-library-muted text-sm leading-relaxed mb-4"></p>
-        <pre id="error-modal-detail" class="hidden text-[11px] bg-library-bg border border-library-border rounded p-3 text-library-muted overflow-x-auto"></pre>
-        <div class="mt-6 flex justify-end">
-          <button onclick="hideErrorModal()" class="px-4 py-2 border border-library-border text-library-muted rounded hover:border-library-accent hover:text-library-text transition-colors text-sm">
-            Close
-          </button>
-        </div>
-      </div>
-    </div>
   <!-- Icons -->
   <script src="https://unpkg.com/lucide@latest"></script>
-   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
- 
-  <!-- Tone.js for Procedural Audio -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
 
-  <!-- Tailwind via CDN for prototyping -->
+  <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
@@ -123,6 +100,10 @@
         class="w-full text-library-muted text-left px-4 py-3 rounded border-l-2 border-transparent transition-all flex items-center gap-3 hover:text-library-text text-sm">
         <i data-lucide="scroll" class="w-4 h-4"></i> Philosophy
       </button>
+      <button onclick="switchView('settings')" id="nav-settings"
+        class="w-full text-library-muted text-left px-4 py-3 rounded border-l-2 border-transparent transition-all flex items-center gap-3 hover:text-library-text text-sm">
+        <i data-lucide="settings" class="w-4 h-4"></i> Settings
+      </button>
     </nav>
 
     <!-- Oracle status -->
@@ -133,10 +114,10 @@
           title="Model inactive"></span>
       </div>
 
-      <button id="btn-wake-oracle" onclick="openOracleModal()"
+      <button id="btn-wake-oracle" onclick="wakeOracle()"
         class="w-full py-2 px-3 border border-library-accent text-library-accent rounded text-xs hover:bg-library-accent hover:text-library-bg transition-colors flex justify-center items-center gap-2">
         <i data-lucide="cpu" class="w-3 h-3"></i>
-        <span id="oracle-btn-text">Config the Intelligence</span>
+        <span id="oracle-btn-text">Wake Intelligence</span>
       </button>
 
       <div id="oracle-progress-container" class="hidden mt-2">
@@ -145,18 +126,12 @@
         </div>
       </div>
 
-        <div id="oracle-active-state" class="hidden flex-col gap-1 mt-2">
+      <div id="oracle-active-state" class="hidden flex-col gap-1 mt-2">
         <div class="text-xs text-green-600/80 flex items-center gap-2">
           <i data-lucide="check-circle" class="w-3 h-3"></i> Intelligence Active
         </div>
         <div id="oracle-engine-text" class="text-[10px] text-library-muted">SmolLM2 135M (Local WebGPU)</div>
       </div>
-
-      <!-- Audio Toggle -->
-      <button onclick="toggleAudio()" class="w-full mt-4 py-2 px-3 border border-library-border text-library-muted rounded text-xs hover:bg-library-panel hover:text-library-text transition-colors flex justify-center items-center gap-2">
-        <i id="audio-toggle-icon" data-lucide="volume-x" class="w-3 h-3"></i>
-        <span id="audio-toggle-text">Audio Muted</span>
-      </button>
 
       <div id="oracle-fallback-state" class="hidden flex-col gap-1 mt-2">
         <div class="text-[11px] text-yellow-600/80 flex items-center gap-2">
@@ -210,119 +185,129 @@
 
       <!-- Address navigator bar -->
       <div class="bg-library-panel border-b border-library-border p-4 sticky top-0 z-10 shadow-md">
-        <div class="max-w-5xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
-          <div class="flex items-center gap-2 text-sm text-library-muted w-full md:w-auto overflow-x-auto pb-2 md:pb-0 scrollbar-hide">
-            <div class="flex items-center bg-library-bg border border-library-border rounded px-2 py-1 focus-within:border-library-accent transition-colors">
-              <span class="mr-1.5 uppercase tracking-wider text-[10px]">Chamber</span>
-              <input type="text" id="chamber-input" value="" autocomplete="off"
-                class="bg-transparent w-48 outline-none text-library-text text-center text-xs"
-                onchange="setChamberFromInput()">
+        <div class="max-w-4xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
+
+          <div
+            class="flex items-center gap-1.5 text-sm text-library-muted w-full md:w-auto overflow-x-auto pb-2 md:pb-0 scrollbar-hide">
+            <!-- Hexagon -->
+            <div
+              class="flex items-center bg-library-bg border border-library-border rounded px-2 py-1 focus-within:border-library-accent transition-colors">
+              <span class="mr-1.5 uppercase tracking-wider text-[10px]">Hex</span>
+              <input type="text" id="input-hex" value="0"
+                class="bg-transparent w-24 outline-none text-library-text text-center text-xs"
+                onchange="navigateToPage()">
             </div>
             <span class="text-library-border/50 text-[10px]">&bull;</span>
-            <div class="flex items-center bg-library-bg border border-library-border rounded px-2 py-1 focus-within:border-library-accent transition-colors" title="Determine which bookshelf wall to zoom into">
-              <span class="mr-1.5 uppercase tracking-wider text-[10px]">Shelf</span>
-              <input type="number" id="input-shelf" value="1" class="bg-transparent w-8 outline-none text-library-text text-center text-xs border-b border-transparent hover:border-library-border focus:border-library-accent transition-colors" onchange="navigateToShelf()">
+
+            <!-- Wall -->
+            <div
+              class="flex items-center bg-library-bg border border-library-border rounded px-2 py-1 focus-within:border-library-accent transition-colors">
+              <span class="mr-1.5 uppercase tracking-wider text-[10px]">Wall</span>
+              <input type="number" id="input-wall" value="1" min="1" max="4"
+                class="bg-transparent w-8 outline-none text-library-text text-center text-xs"
+                onchange="navigateToPage()">
             </div>
             <span class="text-library-border/50 text-[10px]">&bull;</span>
-            <div class="flex items-center bg-library-bg border border-library-border rounded px-2 py-1 focus-within:border-library-accent transition-colors" title="Select a book on the zoomed shelf">
+
+            <!-- Shelf -->
+            <div
+              class="flex items-center bg-library-bg border border-library-border rounded px-2 py-1 focus-within:border-library-accent transition-colors">
               <span class="mr-1.5 uppercase tracking-wider text-[10px]">Book</span>
-              <input type="number" id="input-book" value="1" class="bg-transparent w-8 outline-none text-library-text text-center text-xs border-b border-transparent hover:border-library-border focus:border-library-accent transition-colors" onchange="navigateToBook()">
+              <input type="number" id="input-shelf" value="1" min="1" max="5"
+                class="bg-transparent w-8 outline-none text-library-text text-center text-xs"
+                onchange="navigateToPage()">
             </div>
             <span class="text-library-border/50 text-[10px]">&bull;</span>
+
+            <!-- Volume -->
             <div class="flex items-center bg-library-bg border border-library-border rounded px-2 py-1 focus-within:border-library-accent transition-colors gap-1">
               <button onclick="changeVolume(-1)" class="text-library-muted hover:text-library-accent text-[10px] leading-none px-0.5 transition-colors">&lsaquo;</button>
               <span class="uppercase tracking-wider text-[10px]">Vol</span>
-              <input type="number" id="input-vol" value="1" min="1" max="8" class="bg-transparent w-6 outline-none text-library-text text-center text-xs" onchange="navigateToPage()">
+              <input type="number" id="input-vol" value="1" min="1" max="8"
+                class="bg-transparent w-6 outline-none text-library-text text-center text-xs"
+                onchange="navigateToPage()">
               <span class="text-library-border text-[10px]">/</span>
               <span id="display-max-vols" class="text-library-muted text-[10px]">?</span>
               <button onclick="changeVolume(1)" class="text-library-muted hover:text-library-accent text-[10px] leading-none px-0.5 transition-colors">&rsaquo;</button>
             </div>
             <span class="text-library-border/50 text-[10px]">&bull;</span>
+
+            <!-- Page -->
             <div class="flex items-center bg-library-bg border border-library-border rounded px-2 py-1 focus-within:border-library-accent transition-colors">
               <span class="mr-1.5 uppercase tracking-wider text-[10px]">Pg</span>
-              <input type="number" id="input-pg" value="1" min="1" max="410" class="bg-transparent w-10 outline-none text-library-text text-center text-xs" onchange="navigateToPage()">
+              <input type="number" id="input-pg" value="1" min="1" max="410"
+                class="bg-transparent w-10 outline-none text-library-text text-center text-xs"
+                onchange="navigateToPage()">
               <span class="text-library-border text-[10px]">/</span>
               <span id="display-max-pg" class="text-library-muted text-[10px] ml-0.5">?</span>
             </div>
-            <button onclick="navigateToPage()" class="ml-1 bg-library-border hover:bg-library-accent hover:text-library-bg text-library-text px-3 py-1 rounded text-[10px] font-bold transition-colors">
+
+            <button onclick="navigateToPage()"
+              class="ml-1 bg-library-border hover:bg-library-accent hover:text-library-bg text-library-text px-3 py-1 rounded text-[10px] font-bold transition-colors">
               GO
             </button>
           </div>
+
           <div class="flex items-center gap-3 shrink-0">
-            <button id="btn-chamber-random"
+            <button onclick="randomPage()"
               class="text-xs border border-library-border hover:border-library-accent hover:text-library-accent px-4 py-2 rounded transition-colors flex items-center gap-2">
               <i data-lucide="shuffle" class="w-3 h-3"></i> Random
             </button>
-            <button id="btn-chamber-copy"
+            <button onclick="copyAddress()"
               class="text-xs bg-library-accent/10 text-library-accent hover:bg-library-accent hover:text-library-bg px-4 py-2 rounded transition-colors flex items-center gap-2">
               <i data-lucide="copy" class="w-3 h-3"></i> Copy
             </button>
           </div>
+
         </div>
       </div>
 
-      <div class="flex-1 relative overflow-hidden">
-        <div class="absolute inset-0">
-          <canvas id="three-canvas" class="block w-full h-full"></canvas>
-          <div class="paper-overlay"></div>
-          <div class="vignette"></div>
-          <div id="transition-overlay"></div>
-          <div id="nav-tooltip"></div>
-          <div id="book-labels" class="absolute top-0 left-0 w-full h-full pointer-events-none overflow-hidden z-20"></div>
-        </div>
-
-        <div id="reader-panel" class="hidden absolute inset-0 z-50 flex flex-col bg-black/80 backdrop-blur-sm transition-opacity duration-300">
+      <!-- Book page -->
+      <div class="flex-1 relative p-6 md:p-12 w-full max-w-4xl mx-auto">
+        <!-- The Book Frame -->
+        <div class="absolute inset-6 md:inset-12 bg-[#11100e] border border-library-border rounded shadow-2xl overflow-hidden flex flex-col">
           
-          <button onclick="document.getElementById('reader-panel').classList.add('hidden')" class="absolute top-4 right-4 z-50 p-2 text-library-muted hover:text-library-accent transition-colors">
-            <i data-lucide="x" class="w-8 h-8"></i>
-          </button>
+          <!-- Top UI inside Book -->
+          <div class="absolute top-4 right-6 text-[10px] text-library-muted/50 uppercase tracking-widest font-mono z-10">
+            Seed: <span id="display-seed">—</span>
+          </div>
 
-          <!-- Book page container matching backup.html -->
-          <div class="flex-1 relative p-6 md:p-12 w-full max-w-4xl mx-auto flex flex-col pointer-events-none">
-            <!-- The Book Frame -->
-            <div class="flex-1 relative bg-[#11100e] border border-library-border rounded shadow-2xl overflow-hidden flex flex-col pointer-events-auto">
-              
-              <!-- Top UI inside Book -->
-              <div class="absolute top-4 right-6 text-[10px] text-library-muted/50 uppercase tracking-widest font-mono z-10">
-                Seed: <span id="display-seed">—</span>
-              </div>
-              <div class="absolute top-4 left-6 text-[10px] text-library-muted/50 uppercase tracking-widest font-mono z-10">
-                Chamber: <span id="display-chamber">—</span>
-              </div>
-
-              <!-- Scrolling Content Area -->
-              <div class="flex-1 relative w-full h-full">
-                <div id="page-content" class="absolute inset-0 p-8 md:p-16 overflow-y-auto text-library-text leading-loose space-y-6 text-sm md:text-base font-serif whitespace-pre-wrap transition-opacity duration-300 custom-scrollbar"></div>
-              </div>
-
-              <!-- Loading Indicator -->
-              <div id="gen-indicator" class="hidden absolute bottom-4 left-0 right-0 justify-center items-center gap-2 text-xs text-library-accent opacity-80 pointer-events-none bg-[#11100e]/80 py-2 z-10">
-                <i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i>
-                <span id="gen-status-text">Translating coordinate…</span>
-              </div>
-              
-            </div>
-
-            <!-- Pagination bar -->
-            <div class="mt-4 bg-library-bg border border-library-border p-4 flex justify-between items-center px-8 rounded shadow-xl pointer-events-auto">
-              <div class="text-xs text-library-muted/50 w-32" id="gen-time"></div>
-              <div class="flex gap-8 items-center mx-auto">
-                <button onclick="changePage(-1)"
-                  class="text-library-muted hover:text-library-accent flex items-center gap-2 text-sm transition-colors">
-                  <i data-lucide="arrow-left" class="w-4 h-4"></i> Previous Page
-                </button>
-                <button onclick="changePage(1)"
-                  class="text-library-muted hover:text-library-accent flex items-center gap-2 text-sm transition-colors">
-                  Next Page <i data-lucide="arrow-right" class="w-4 h-4"></i>
-                </button>
-              </div>
-              <div class="w-32 text-right">
-                <span class="text-[9px] text-library-muted/40 uppercase tracking-widest leading-tight">
-                  Shelf books: <span id="display-books-range" class="text-library-muted/60">?</span>
-                </span>
+          <!-- Scrolling Content Area -->
+          <div class="flex-1 relative w-full h-full">
+            <div id="page-content" class="absolute inset-0 p-8 md:p-16 overflow-y-auto text-library-text leading-loose space-y-6 text-sm md:text-base font-serif whitespace-pre-wrap transition-opacity duration-300 custom-scrollbar">
+              <div class="text-center text-library-muted italic mt-20 flex flex-col items-center gap-4">
+                Enter an address above, or click "Random" to begin your journey through the infinite library…
               </div>
             </div>
           </div>
+
+          <!-- Loading Indicator -->
+          <div id="gen-indicator" class="hidden absolute bottom-4 left-0 right-0 justify-center items-center gap-2 text-xs text-library-accent opacity-80 pointer-events-none bg-[#11100e]/80 py-2">
+            <i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i>
+            <span id="gen-status-text">Translating coordinate…</span>
+          </div>
+          
+        </div>
+      </div>
+
+      <!-- Pagination bar -->
+      <div class="border-t border-library-border bg-library-bg p-4 flex justify-between items-center px-8">
+        <div class="text-xs text-library-muted/50 w-32" id="gen-time"></div>
+        <div class="flex gap-8">
+          <button onclick="changePage(-1)"
+            class="text-library-muted hover:text-library-accent flex items-center gap-2 text-sm transition-colors">
+            <i data-lucide="arrow-left" class="w-4 h-4"></i> Previous Page
+          </button>
+          <button onclick="changePage(1)"
+            class="text-library-muted hover:text-library-accent flex items-center gap-2 text-sm transition-colors">
+            Next Page <i data-lucide="arrow-right" class="w-4 h-4"></i>
+          </button>
+        </div>
+        <!-- Shelf info badge -->
+        <div class="w-32 text-right">
+          <span class="text-[9px] text-library-muted/40 uppercase tracking-widest leading-tight">
+            Shelf books: <span id="display-books-range" class="text-library-muted/60">?</span>
+          </span>
         </div>
       </div>
     </section>
@@ -404,81 +389,67 @@
       </div>
     </section>
 
-    <!-- Oracle Config Modal -->
-    <div id="oracle-modal" class="hidden fixed inset-0 z-[220] flex items-center justify-center">
-      <div class="absolute inset-0 bg-black/75 backdrop-blur-sm" onclick="closeOracleModal()"></div>
-      <div class="relative bg-library-panel border border-library-border rounded-xl p-8 max-w-2xl w-full mx-4 shadow-2xl animate-fade-in max-h-[90vh] overflow-y-auto">
-        <div class="flex flex-col items-center text-center mb-8 relative">
-          <button onclick="closeOracleModal()" class="absolute -top-2 -right-2 text-library-muted hover:text-library-text transition-colors p-2">
-            <i data-lucide="x" class="w-5 h-5"></i>
-          </button>
-          <h2 class="font-serif text-2xl text-library-text flex items-center justify-center gap-2">
-            <i data-lucide="cpu" class="w-6 h-6 text-library-accent"></i> Config the Intelligence
-          </h2>
-          <p class="text-library-muted text-sm mt-3 leading-relaxed max-w-lg">
-            The smarter the model is, the better the library. Your model choice uniquely determines the pages — using the same model will always generate the exact same pages. We strongly recommend a fast provider for that instant generation feeling (for example, <strong>Cerebras</strong>).
-          </p>
+    <!-- VIEW: SETTINGS -->
+    <section id="view-settings" class="hidden flex-1 overflow-y-auto p-8 animate-fade-in max-w-3xl mx-auto w-full">
+      <div class="mb-12">
+        <h2 class="font-serif text-3xl mb-2 text-library-text">Oracle Configuration</h2>
+        <p class="text-library-muted text-sm">Adjust the intelligence behind the infinite library.</p>
+      </div>
+
+      <div class="space-y-8">
+        <!-- Engine Toggle -->
+        <div class="bg-library-panel border border-library-border p-6 rounded-lg">
+          <h3 class="text-library-accent font-serif text-lg mb-4">Inference Engine</h3>
+          <div class="flex flex-col gap-4">
+            <label class="flex items-center gap-3 cursor-pointer">
+              <input type="radio" name="engine-type" value="local" checked class="accent-library-accent" onchange="toggleEngineType()">
+              <span class="text-sm text-library-text">Local WebGPU (WebLLM)</span>
+            </label>
+            <label class="flex items-center gap-3 cursor-pointer">
+              <input type="radio" name="engine-type" value="api" class="accent-library-accent" onchange="toggleEngineType()">
+              <span class="text-sm text-library-text">External API (OpenAI Compatible)</span>
+            </label>
+          </div>
         </div>
 
-        <div class="space-y-8">
-          <!-- Engine Toggle -->
-          <div class="bg-library-bg border border-library-border p-6 rounded-lg">
-            <h3 class="text-library-accent font-serif text-lg mb-4">Inference Engine</h3>
-            <div class="flex flex-col gap-4">
-              <label class="flex items-center gap-3 cursor-pointer">
-                <input type="radio" name="engine-type" value="local" checked class="accent-library-accent" onchange="toggleEngineType()">
-                <span class="text-sm text-library-text">Local WebGPU (WebLLM)</span>
-              </label>
-              <label class="flex items-center gap-3 cursor-pointer">
-                <input type="radio" name="engine-type" value="api" class="accent-library-accent" onchange="toggleEngineType()">
-                <span class="text-sm text-library-text">External API (OpenAI Compatible)</span>
-              </label>
+        <!-- Local Model Select -->
+        <div id="settings-local" class="bg-library-panel border border-library-border p-6 rounded-lg">
+          <h3 class="text-library-accent font-serif text-lg mb-4">Local Model Selection</h3>
+          <p class="text-xs text-library-muted mb-4">Choose a model to download and run locally. Larger models require more VRAM and memory. If the model fails to load, try a smaller quantized model (-q4 or -q0).</p>
+          <select id="select-local-model" class="w-full bg-library-bg border border-library-border rounded px-4 py-3 text-sm text-library-text focus:outline-none focus:border-library-accent">
+            <!-- Populated by JS -->
+          </select>
+          <button onclick="saveLocalModel()" class="mt-4 bg-library-border hover:bg-library-accent hover:text-library-bg text-library-text px-4 py-2 rounded text-xs font-bold transition-colors">
+            Apply Local Model
+          </button>
+        </div>
+
+        <!-- API Settings -->
+        <div id="settings-api" class="bg-library-panel border border-library-border p-6 rounded-lg hidden">
+          <h3 class="text-library-accent font-serif text-lg mb-4">External API Settings</h3>
+          <p class="text-xs text-library-muted mb-4">Connect to a remote inference endpoint. Supports any OpenAI-compatible API (e.g. OpenAI, Together, Groq, Ollama).</p>
+          
+          <div class="space-y-4">
+            <div>
+              <label class="block text-[10px] uppercase tracking-widest text-library-muted mb-1.5">API URL</label>
+              <input type="text" id="api-url" placeholder="http://localhost:11434/v1"
+                class="w-full bg-library-bg border border-library-border rounded px-3 py-2 text-xs focus:outline-none focus:border-library-accent transition-colors">
+            </div>
+            <div>
+              <label class="block text-xs uppercase tracking-wider text-library-muted mb-1">Model Name</label>
+              <input type="text" id="input-api-model" placeholder="gpt-4o-mini" class="w-full bg-library-bg border border-library-border rounded px-4 py-2 text-sm text-library-text focus:outline-none focus:border-library-accent">
+            </div>
+            <div>
+              <label class="block text-xs uppercase tracking-wider text-library-muted mb-1">API Key</label>
+              <input type="password" id="input-api-key" placeholder="sk-..." class="w-full bg-library-bg border border-library-border rounded px-4 py-2 text-sm text-library-text focus:outline-none focus:border-library-accent">
             </div>
           </div>
-
-          <!-- Local Model Select -->
-          <div id="settings-local" class="bg-library-bg border border-library-border p-6 rounded-lg">
-            <h3 class="text-library-accent font-serif text-lg mb-4">Local Model Selection</h3>
-            <p class="text-xs text-library-muted mb-4">Choose a model to download and run locally. Larger models require more VRAM and memory. If the model fails to load, try a smaller quantized model.</p>
-            <select id="select-local-model" class="w-full bg-library-panel border border-library-border rounded px-4 py-3 text-sm text-library-text focus:outline-none focus:border-library-accent">
-              <!-- Populated by JS -->
-            </select>
-            <button onclick="saveLocalModel()" class="mt-4 w-full bg-library-accent hover:bg-library-accentHover text-library-bg px-4 py-3 rounded text-sm font-bold transition-colors">
-              Apply & Wake Model
-            </button>
-          </div>
-
-          <!-- API Settings -->
-          <div id="settings-api" class="bg-library-bg border border-library-border p-6 rounded-lg hidden">
-            <h3 class="text-library-accent font-serif text-lg mb-4">External API Settings</h3>
-            <p class="text-xs text-library-muted mb-4">Connect to a remote inference endpoint. Supports any OpenAI-compatible API (e.g. Cerebras, Groq, Together, OpenAI).</p>
-            
-            <div class="space-y-4">
-              <div class="flex items-center justify-between">
-                <label class="text-[10px] uppercase tracking-widest text-library-muted">Local Proxy (CORS Fix)</label>
-                <input type="checkbox" id="api-proxy" class="accent-library-accent" onchange="saveApiSettings()">
-              </div>
-              <div>
-                <label class="block text-[10px] uppercase tracking-widest text-library-muted mb-1.5">API URL</label>
-                <input type="text" id="api-url" placeholder="https://api.cerebras.ai/v1"
-                  class="w-full bg-library-panel border border-library-border rounded px-3 py-2 text-xs focus:outline-none focus:border-library-accent transition-colors">
-              </div>
-              <div>
-                <label class="block text-xs uppercase tracking-wider text-library-muted mb-1">Model Name</label>
-                <input type="text" id="input-api-model" placeholder="llama3.1-8b" class="w-full bg-library-panel border border-library-border rounded px-4 py-2 text-sm text-library-text focus:outline-none focus:border-library-accent">
-              </div>
-              <div>
-                <label class="block text-xs uppercase tracking-wider text-library-muted mb-1">API Key</label>
-                <input type="password" id="input-api-key" placeholder="sk-..." class="w-full bg-library-panel border border-library-border rounded px-4 py-2 text-sm text-library-text focus:outline-none focus:border-library-accent">
-              </div>
-            </div>
-            <button onclick="saveApiSettings()" class="mt-6 w-full bg-library-accent hover:bg-library-accentHover text-library-bg px-4 py-3 rounded text-sm font-bold transition-colors">
-              Save & Connect API
-            </button>
-          </div>
+          <button onclick="saveApiSettings()" class="mt-4 bg-library-border hover:bg-library-accent hover:text-library-bg text-library-text px-4 py-2 rounded text-xs font-bold transition-colors">
+            Save & Connect API
+          </button>
         </div>
       </div>
-    </div>
+    </section>
 
   </main>
 
@@ -487,6 +458,24 @@
     class="fixed bottom-4 right-4 bg-library-panel border border-library-accent text-library-text px-4 py-3 rounded shadow-lg transform translate-y-20 opacity-0 transition-all duration-300 z-50 flex items-center gap-3">
     <i data-lucide="info" class="w-4 h-4 text-library-accent"></i>
     <span id="toast-msg" class="text-sm">Message</span>
+  </div>
+
+  <!-- Error Modal -->
+  <div id="error-modal" class="hidden fixed inset-0 z-[220] flex items-center justify-center">
+    <div class="absolute inset-0 bg-black/75 backdrop-blur-sm" onclick="hideErrorModal()"></div>
+    <div class="relative bg-library-panel border border-library-border rounded-xl p-8 max-w-lg w-full mx-4 shadow-2xl animate-fade-in">
+      <div class="flex items-center gap-3 mb-4">
+        <i data-lucide="alert-triangle" class="w-6 h-6 text-library-accent flex-shrink-0"></i>
+        <h2 id="error-modal-title" class="font-serif text-2xl text-library-text">Request failed</h2>
+      </div>
+      <p id="error-modal-message" class="text-library-muted text-sm leading-relaxed mb-4"></p>
+      <pre id="error-modal-detail" class="hidden text-[11px] bg-library-bg border border-library-border rounded p-3 text-library-muted overflow-x-auto"></pre>
+      <div class="mt-6 flex justify-end">
+        <button onclick="hideErrorModal()" class="px-4 py-2 border border-library-border text-library-muted rounded hover:border-library-accent hover:text-library-text transition-colors text-sm">
+          Close
+        </button>
+      </div>
+    </div>
   </div>
 
   <!-- Consent Modal -->
@@ -543,46 +532,8 @@
     </div>
   </div>
 
-  <!-- Error Modal -->
-  <div id="error-modal" class="hidden fixed inset-0 z-[220] flex items-center justify-center">
-    <div class="absolute inset-0 bg-black/75 backdrop-blur-sm" onclick="hideErrorModal()"></div>
-    <div class="relative bg-library-panel border border-library-border rounded-xl p-8 max-w-lg w-full mx-4 shadow-2xl animate-fade-in">
-      <div class="flex items-center gap-3 mb-4">
-        <i data-lucide="alert-triangle" class="w-6 h-6 text-library-accent flex-shrink-0"></i>
-        <h2 id="error-modal-title" class="font-serif text-2xl text-library-text">Request failed</h2>
-      </div>
-      <p id="error-modal-message" class="text-library-muted text-sm leading-relaxed mb-4"></p>
-      <pre id="error-modal-detail" class="hidden text-[11px] bg-library-bg border border-library-border rounded p-3 text-library-muted overflow-x-auto"></pre>
-      <div class="mt-6 flex justify-end">
-        <button onclick="hideErrorModal()" class="px-4 py-2 border border-library-border text-library-muted rounded hover:border-library-accent hover:text-library-text transition-colors text-sm">
-          Close
-        </button>
-      </div>
-    </div>
-  </div>
-
   <!-- App logic -->
-  <script src="js/sound.js"></script>
   <script src="js/app.js"></script>
-  <script src="js/chamber.js"></script>
-
-    <!-- Error Modal -->
-    <div id="error-modal" class="hidden fixed inset-0 z-[220] flex items-center justify-center">
-      <div class="absolute inset-0 bg-black/75 backdrop-blur-sm" onclick="hideErrorModal()"></div>
-      <div class="relative bg-library-panel border border-library-border rounded-xl p-8 max-w-lg w-full mx-4 shadow-2xl animate-fade-in">
-        <div class="flex items-center gap-3 mb-4">
-          <i data-lucide="alert-triangle" class="w-6 h-6 text-library-accent flex-shrink-0"></i>
-          <h2 id="error-modal-title" class="font-serif text-2xl text-library-text">Request failed</h2>
-        </div>
-        <p id="error-modal-message" class="text-library-muted text-sm leading-relaxed mb-4"></p>
-        <pre id="error-modal-detail" class="hidden text-[11px] bg-library-bg border border-library-border rounded p-3 text-library-muted overflow-x-auto"></pre>
-        <div class="mt-6 flex justify-end">
-          <button onclick="hideErrorModal()" class="px-4 py-2 border border-library-border text-library-muted rounded hover:border-library-accent hover:text-library-text transition-colors text-sm">
-            Close
-          </button>
-        </div>
-      </div>
-    </div>
 
 </body>
 
