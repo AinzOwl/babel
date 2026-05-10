@@ -5,14 +5,14 @@
   // Use global encoding if available
   const encodeAddress = (n) => window.encodeAddress ? window.encodeAddress(n) : n.toString();
   const decodeAddress = (s) => window.decodeAddress ? window.decodeAddress(s) : BigInt(1);
-  
+
   // Use a fallback charset for titles if not initialized
   const titleCharset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-  
+
   function generateBookTitle(rng) {
     let title = "";
     const maxLength = 200;
-    
+
     while (title.length < maxLength) {
       const wordLen = Math.floor(rng() * 6) + 3;
       let word = "";
@@ -724,7 +724,7 @@
       wallGroup.userData.isEnvironment = true;
       scene.add(wallGroup);
     });
-    
+
     let maxShelf = 0;
     for (let obj of interactables) {
       if (obj.userData && obj.userData.isBookshelf && obj.userData.wallIndex !== undefined) {
@@ -865,10 +865,10 @@
     originalCamTarget.copy(controls.target);
 
     const ud = shelfObj.userData;
-    
+
     const shelfInput = document.getElementById('input-shelf');
     if (shelfInput && ud.wallIndex !== undefined) shelfInput.value = ud.wallIndex;
-    
+
     const bookInput = document.getElementById('input-book');
     if (bookInput && ud.books) bookInput.max = ud.books.length;
 
@@ -992,13 +992,13 @@
       if (localX >= book.xStart && localX <= book.xEnd && localY >= book.yBase && localY <= book.yTop) {
         const bookInput = document.getElementById('input-book');
         if (bookInput) bookInput.value = i + 1;
-        
+
         const volInput = document.getElementById('input-vol');
         if (volInput) volInput.value = 1;
-        
+
         const pgInput = document.getElementById('input-pg');
         if (pgInput) pgInput.value = 1;
-        
+
         const chamber = encodeAddress(config.currentAddress);
         const panel = document.getElementById('reader-panel');
         if (panel) panel.classList.remove('hidden');
@@ -1141,7 +1141,7 @@
       ta.value = link;
       document.body.appendChild(ta);
       ta.select();
-      try { document.execCommand("copy"); } catch {}
+      try { document.execCommand("copy"); } catch { }
       document.body.removeChild(ta);
     });
   }
@@ -1151,7 +1151,7 @@
     const parts = hash.split("/");
     if (parts[0] === "reader" && parts[1]) {
       setChamber(decodeAddress(decodeURIComponent(parts[1])));
-      
+
       // Deep link to shelf/book
       if (parts[2]) {
         const shelfNum = parseInt(parts[2]);
@@ -1161,7 +1161,7 @@
             const shelfInput = document.getElementById('input-shelf');
             if (shelfInput) shelfInput.value = shelfNum;
             if (window.navigateToShelf) window.navigateToShelf();
-            
+
             if (parts[3]) {
               const bookNum = parseInt(parts[3]);
               const bookInput = document.getElementById('input-book');
@@ -1204,7 +1204,7 @@
   function initChamber() {
     if (isInitialized) return;
     isInitialized = true;
-    
+
     if (!initFromHash()) {
       setChamber(randomChamber());
     }
@@ -1224,17 +1224,17 @@
   }
 
   wrapSwitchView();
-  
+
   // If we're already on the reader view (deep link), init now
   if (window.location.hash.startsWith("#reader")) {
     initChamber();
   }
   window.setChamberFromInput = setChamberFromInput;
 
-  window.navigateToShelf = function() {
+  window.navigateToShelf = function () {
     const shelfNum = parseInt(document.getElementById('input-shelf').value);
     if (!shelfNum || isNaN(shelfNum)) return;
-    
+
     let targetShelf = null;
     for (let obj of interactables) {
       if (obj.userData && obj.userData.isBookshelf && obj.userData.wallIndex === shelfNum) {
@@ -1242,7 +1242,7 @@
         break;
       }
     }
-    
+
     if (targetShelf) {
       const ud = targetShelf.userData;
       const mid = ud.p1.clone().lerp(ud.p2, 0.5);
@@ -1251,21 +1251,21 @@
     }
   };
 
-  window.navigateToBook = function() {
+  window.navigateToBook = function () {
     const bookNum = parseInt(document.getElementById('input-book').value);
     if (!bookNum || isNaN(bookNum) || !isZoomed || !activeBookshelf) return;
-    
+
     const ud = activeBookshelf.userData;
     if (ud && ud.books) {
       const idx = bookNum - 1;
       if (idx >= 0 && idx < ud.books.length) {
         const book = ud.books[idx];
-        
+
         const volInput = document.getElementById('input-vol');
         if (volInput) volInput.value = 1;
         const pgInput = document.getElementById('input-pg');
         if (pgInput) pgInput.value = 1;
-        
+
         const chamber = encodeAddress(config.currentAddress);
         const panel = document.getElementById('reader-panel');
         if (panel) panel.classList.remove('hidden');
