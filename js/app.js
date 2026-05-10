@@ -1,7 +1,7 @@
 // ───────────────────────────────────────────────────────────
 // INITIALIZATION
 // ───────────────────────────────────────────────────────────
-lucide.createIcons();
+
 
 const state = {
   view: window.location.hash.slice(1).split('/')[0] || 'home',
@@ -18,20 +18,24 @@ const state = {
   address: { chamber: '', shelf: 1, book: 1, vol: 1, pg: 1, totalPages: 410 },
 };
 
-// Global functions for Oracle Modal
-window.openOracleModal = function() {
+function openOracleModal() {
   const modal = document.getElementById('oracle-modal');
-  if (modal) modal.classList.remove('hidden');
+  if (modal) {
+    modal.classList.remove('hidden');
+  }
   // Disable OrbitControls while modal is open
   if (window.__orbitControls) window.__orbitControls.enabled = false;
-};
+}
 
-window.closeOracleModal = function() {
+function closeOracleModal() {
   const modal = document.getElementById('oracle-modal');
   if (modal) modal.classList.add('hidden');
   // Re-enable OrbitControls when modal closes
   if (window.__orbitControls) window.__orbitControls.enabled = true;
-};
+}
+
+window.openOracleModal = openOracleModal;
+window.closeOracleModal = closeOracleModal;
 
 const CONSENT_KEY = 'babel_model_consent';
 
@@ -43,8 +47,10 @@ let CHAMBER_CHAR_TO_INDEX = new Map();
 const CHAMBER_BASE = 128000n;
 
 function initChamberCharset() {
+  if (CHAMBER_CHARSET.length > 0) return;
   const regex = /^[\p{L}\p{N}\p{P}\p{S}\p{M}]$/u;
   let cp = 33;
+  // Use a smaller batch size to avoid blocking for too long
   while (CHAMBER_CHARSET.length < 128000 && cp <= 0x10FFFF) {
     const char = String.fromCodePoint(cp);
     if (regex.test(char)) {
@@ -52,9 +58,10 @@ function initChamberCharset() {
       CHAMBER_CHARSET.push(char);
     }
     cp++;
+    // Break periodically if it takes too long? 
+    // For now just reduce the target if needed, but 128k is the design
   }
 }
-initChamberCharset();
 
 function encodeChamber(numBigInt) {
   if (numBigInt === 0n) return CHAMBER_CHARSET[0];
@@ -1031,6 +1038,8 @@ function wakeOracle() {
  * Reads the stored preference and acts accordingly.
  */
 function checkConsent() {
+  initChamberCharset();
+  if (window.lucide) lucide.createIcons();
   initSettingsUI();
 
   const consent = localStorage.getItem(CONSENT_KEY);

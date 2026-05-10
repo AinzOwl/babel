@@ -16,26 +16,7 @@
     rel="stylesheet">
 
 
-  <!-- Error Modal -->
-  <div id="error-modal" class="hidden fixed inset-0 z-[220] flex items-center justify-center">
-    <div class="absolute inset-0 bg-black/75 backdrop-blur-sm" onclick="hideErrorModal()"></div>
-    <div
-      class="relative bg-library-panel border border-library-border rounded-xl p-8 max-w-lg w-full mx-4 shadow-2xl animate-fade-in">
-      <div class="flex items-center gap-3 mb-4">
-        <i data-lucide="alert-triangle" class="w-6 h-6 text-library-accent flex-shrink-0"></i>
-        <h2 id="error-modal-title" class="font-serif text-2xl text-library-text">Request failed</h2>
-      </div>
-      <p id="error-modal-message" class="text-library-muted text-sm leading-relaxed mb-4"></p>
-      <pre id="error-modal-detail"
-        class="hidden text-[11px] bg-library-bg border border-library-border rounded p-3 text-library-muted overflow-x-auto"></pre>
-      <div class="mt-6 flex justify-end">
-        <button onclick="hideErrorModal()"
-          class="px-4 py-2 border border-library-border text-library-muted rounded hover:border-library-accent hover:text-library-text transition-colors text-sm">
-          Close
-        </button>
-      </div>
-    </div>
-  </div>
+
   <!-- Icons -->
   <script src="https://unpkg.com/lucide@latest"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -535,96 +516,100 @@
         </p>
       </div>
 
-      <!-- Oracle Config Modal -->
-      <div id="oracle-modal" class="hidden fixed inset-0 z-[220] flex items-center justify-center">
-        <div class="absolute inset-0 bg-black/75 backdrop-blur-sm" onclick="closeOracleModal()"></div>
-        <div
-          class="relative bg-library-panel border border-library-border rounded-xl p-8 max-w-2xl w-full mx-4 shadow-2xl animate-fade-in max-h-[90vh] overflow-y-auto">
-          <div class="flex flex-col items-center text-center mb-8 relative">
-            <button onclick="closeOracleModal()"
-              class="absolute -top-2 -right-2 text-library-muted hover:text-library-text transition-colors p-2">
-              <i data-lucide="x" class="w-5 h-5"></i>
-            </button>
-            <h2 class="font-serif text-2xl text-library-text flex items-center justify-center gap-2">
-              <i data-lucide="cpu" class="w-6 h-6 text-library-accent"></i> Config the Intelligence
-            </h2>
-            <p class="text-library-muted text-sm mt-3 leading-relaxed max-w-lg">
-              The smarter the model is, the better the library. Your model choice uniquely determines the pages — using
-              the same model will always generate the exact same pages. We strongly recommend a fast provider for that
-              instant generation feeling (for example, <strong>Cerebras</strong>).
-            </p>
-          </div>
+  </main>
 
-          <div class="space-y-8">
-            <!-- Engine Toggle -->
-            <div class="bg-library-bg border border-library-border p-6 rounded-lg">
-              <h3 class="text-library-accent font-serif text-lg mb-4">Inference Engine</h3>
-              <div class="flex flex-col gap-4">
-                <label class="flex items-center gap-3 cursor-pointer">
-                  <input type="radio" name="engine-type" value="local" checked class="accent-library-accent"
-                    onchange="toggleEngineType()">
-                  <span class="text-sm text-library-text">Local WebGPU (WebLLM)</span>
-                </label>
-                <label class="flex items-center gap-3 cursor-pointer">
-                  <input type="radio" name="engine-type" value="api" class="accent-library-accent"
-                    onchange="toggleEngineType()">
-                  <span class="text-sm text-library-text">External API (OpenAI Compatible)</span>
-                </label>
-              </div>
-            </div>
+  <!-- Transition Overlay -->
+  <div id="transition-overlay"
+    class="fixed inset-0 bg-black z-[300] opacity-0 pointer-events-none transition-opacity duration-1000"></div>
 
-            <!-- Local Model Select -->
-            <div id="settings-local" class="bg-library-bg border border-library-border p-6 rounded-lg">
-              <h3 class="text-library-accent font-serif text-lg mb-4">Local Model Selection</h3>
-              <p class="text-xs text-library-muted mb-4">Choose a model to download and run locally. Larger models
-                require more VRAM and memory. If the model fails to load, try a smaller quantized model.</p>
-              <select id="select-local-model"
-                class="w-full bg-library-panel border border-library-border rounded px-4 py-3 text-sm text-library-text focus:outline-none focus:border-library-accent">
-                <!-- Populated by JS -->
-              </select>
-              <button onclick="saveLocalModel()"
-                class="mt-4 w-full bg-library-accent hover:bg-library-accentHover text-library-bg px-4 py-3 rounded text-sm font-bold transition-colors">
-                Apply & Wake Model
-              </button>
-            </div>
-
-            <!-- API Settings -->
-            <div id="settings-api" class="bg-library-bg border border-library-border p-6 rounded-lg hidden">
-              <h3 class="text-library-accent font-serif text-lg mb-4">External API Settings</h3>
-              <p class="text-xs text-library-muted mb-4">Connect to a remote inference endpoint. Supports any
-                OpenAI-compatible API (e.g. Cerebras, Groq, Together, OpenAI).</p>
-
-              <div class="space-y-4">
-                <div class="flex items-center justify-between">
-                  <label class="text-[10px] uppercase tracking-widest text-library-muted">Local Proxy (CORS Fix)</label>
-                  <input type="checkbox" id="api-proxy" class="accent-library-accent" onchange="saveApiSettings()">
-                </div>
-                <div>
-                  <label class="block text-[10px] uppercase tracking-widest text-library-muted mb-1.5">API URL</label>
-                  <input type="text" id="api-url" placeholder="https://api.cerebras.ai/v1"
-                    class="w-full bg-library-panel border border-library-border rounded px-3 py-2 text-xs focus:outline-none focus:border-library-accent transition-colors">
-                </div>
-                <div>
-                  <label class="block text-xs uppercase tracking-wider text-library-muted mb-1">Model Name</label>
-                  <input type="text" id="input-api-model" placeholder="llama3.1-8b"
-                    class="w-full bg-library-panel border border-library-border rounded px-4 py-2 text-sm text-library-text focus:outline-none focus:border-library-accent">
-                </div>
-                <div>
-                  <label class="block text-xs uppercase tracking-wider text-library-muted mb-1">API Key</label>
-                  <input type="password" id="input-api-key" placeholder="sk-..."
-                    class="w-full bg-library-panel border border-library-border rounded px-4 py-2 text-sm text-library-text focus:outline-none focus:border-library-accent">
-                </div>
-              </div>
-              <button onclick="saveApiSettings()"
-                class="mt-6 w-full bg-library-accent hover:bg-library-accentHover text-library-bg px-4 py-3 rounded text-sm font-bold transition-colors">
-                Save & Connect API
-              </button>
-            </div>
-          </div>
-        </div>
+  <!-- Oracle Config Modal -->
+  <div id="oracle-modal" class="hidden fixed inset-0 z-[220] flex items-center justify-center">
+    <div class="absolute inset-0 bg-black/75 backdrop-blur-sm" onclick="closeOracleModal()"></div>
+    <div
+      class="relative bg-library-panel border border-library-border rounded-xl p-8 max-w-2xl w-full mx-4 shadow-2xl animate-fade-in max-h-[90vh] overflow-y-auto">
+      <div class="flex flex-col items-center text-center mb-8 relative">
+        <button onclick="closeOracleModal()"
+          class="absolute -top-2 -right-2 text-library-muted hover:text-library-text transition-colors p-2">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+        <h2 class="font-serif text-2xl text-library-text flex items-center justify-center gap-2">
+          <i data-lucide="cpu" class="w-6 h-6 text-library-accent"></i> Config the Intelligence
+        </h2>
+        <p class="text-library-muted text-sm mt-3 leading-relaxed max-w-lg">
+          The smarter the model is, the better the library. Your model choice uniquely determines the pages — using the
+          same model will always generate the exact same pages. We strongly recommend a fast provider for that instant
+          generation feeling (for example, <strong>Cerebras</strong>).
+        </p>
       </div>
 
-  </main>
+      <div class="space-y-8">
+        <!-- Engine Toggle -->
+        <div class="bg-library-bg border border-library-border p-6 rounded-lg">
+          <h3 class="text-library-accent font-serif text-lg mb-4">Inference Engine</h3>
+          <div class="flex flex-col gap-4">
+            <label class="flex items-center gap-3 cursor-pointer">
+              <input type="radio" name="engine-type" value="local" checked class="accent-library-accent"
+                onchange="toggleEngineType()">
+              <span class="text-sm text-library-text">Local WebGPU (WebLLM)</span>
+            </label>
+            <label class="flex items-center gap-3 cursor-pointer">
+              <input type="radio" name="engine-type" value="api" class="accent-library-accent"
+                onchange="toggleEngineType()">
+              <span class="text-sm text-library-text">External API (OpenAI Compatible)</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Local Model Select -->
+        <div id="settings-local" class="bg-library-bg border border-library-border p-6 rounded-lg">
+          <h3 class="text-library-accent font-serif text-lg mb-4">Local Model Selection</h3>
+          <p class="text-xs text-library-muted mb-4">Choose a model to download and run locally. Larger models require
+            more VRAM and memory. If the model fails to load, try a smaller quantized model.</p>
+          <select id="select-local-model"
+            class="w-full bg-library-panel border border-library-border rounded px-4 py-3 text-sm text-library-text focus:outline-none focus:border-library-accent">
+            <!-- Populated by JS -->
+          </select>
+          <button onclick="saveLocalModel()"
+            class="mt-4 w-full bg-library-accent hover:bg-library-accentHover text-library-bg px-4 py-3 rounded text-sm font-bold transition-colors">
+            Apply & Wake Model
+          </button>
+        </div>
+
+        <!-- API Settings -->
+        <div id="settings-api" class="bg-library-bg border border-library-border p-6 rounded-lg hidden">
+          <h3 class="text-library-accent font-serif text-lg mb-4">External API Settings</h3>
+          <p class="text-xs text-library-muted mb-4">Connect to a remote inference endpoint. Supports any
+            OpenAI-compatible API (e.g. Cerebras, Groq, Together, OpenAI).</p>
+
+          <div class="space-y-4">
+            <div class="flex items-center justify-between">
+              <label class="text-[10px] uppercase tracking-widest text-library-muted">Local Proxy (CORS Fix)</label>
+              <input type="checkbox" id="api-proxy" class="accent-library-accent" onchange="saveApiSettings()">
+            </div>
+            <div>
+              <label class="block text-[10px] uppercase tracking-widest text-library-muted mb-1.5">API URL</label>
+              <input type="text" id="api-url" placeholder="https://api.cerebras.ai/v1"
+                class="w-full bg-library-panel border border-library-border rounded px-3 py-2 text-xs focus:outline-none focus:border-library-accent transition-colors">
+            </div>
+            <div>
+              <label class="block text-xs uppercase tracking-wider text-library-muted mb-1">Model Name</label>
+              <input type="text" id="input-api-model" placeholder="llama3.1-8b"
+                class="w-full bg-library-panel border border-library-border rounded px-4 py-2 text-sm text-library-text focus:outline-none focus:border-library-accent">
+            </div>
+            <div>
+              <label class="block text-xs uppercase tracking-wider text-library-muted mb-1">API Key</label>
+              <input type="password" id="input-api-key" placeholder="sk-..."
+                class="w-full bg-library-panel border border-library-border rounded px-4 py-2 text-sm text-library-text focus:outline-none focus:border-library-accent">
+            </div>
+          </div>
+          <button onclick="saveApiSettings()"
+            class="mt-6 w-full bg-library-accent hover:bg-library-accentHover text-library-bg px-4 py-3 rounded text-sm font-bold transition-colors">
+            Save & Connect API
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <!-- Toast -->
   <div id="toast"
